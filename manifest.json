@@ -1,0 +1,36 @@
+{
+  "manifest_version": 3,
+  "name": "Excel File Processor",
+  "version": "1.0.0",
+  "description": "Download 3 Excel files from PowerBI and replace sheets in destination Excel file",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "downloads",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://app.powerbi.com/*",
+    "https://wabi-south-east-asia-b-primary-redirect.analysis.windows.net/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://app.powerbi.com/*"],
+      "js": ["download.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Excel File Processor"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["libs/xlsx.full.min.js", "config.js", "excel-processor.js", "powerbi-debug.js"],
+      "matches": ["<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self';"
+  }
+}

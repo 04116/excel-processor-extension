@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 400px;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+    .file-section {
+      margin-bottom: 20px;
+    }
+    label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: bold;
+    }
+    input[type="file"] {
+      width: 100%;
+      margin-bottom: 10px;
+    }
+    .sheet-input {
+      width: 100%;
+      padding: 8px;
+      margin-bottom: 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    .column-inputs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .column-inputs input {
+      flex: 1;
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+    }
+    button {
+      width: 100%;
+      padding: 12px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 4px;
+      display: none;
+    }
+    .status.success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+    .status.error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+    .remembered-file {
+      display: flex;
+      align-items: center;
+      background-color: #e8f5e8;
+      border: 1px solid #4CAF50;
+      border-radius: 4px;
+      padding: 8px;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+    .remembered-file .file-name {
+      flex: 1;
+      font-size: 12px;
+      color: #2e7d2e;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .reuse-btn {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 4px 8px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .reuse-btn:hover {
+      background-color: #45a049;
+    }
+    .clear-btn {
+      background-color: #f44336;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 12px;
+      cursor: pointer;
+      min-width: 20px;
+    }
+    .clear-btn:hover {
+      background-color: #da190b;
+    }
+    .sheet-checkboxes {
+      max-height: 120px;
+      overflow-y: auto;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 8px;
+      margin-bottom: 10px;
+    }
+    .sheet-checkbox {
+      display: flex;
+      align-items: center;
+      margin-bottom: 6px;
+      padding: 4px;
+      border-radius: 3px;
+    }
+    .sheet-checkbox:hover {
+      background-color: #f5f5f5;
+    }
+    .sheet-checkbox input[type="checkbox"],
+    .sheet-checkbox input[type="radio"] {
+      margin-right: 8px;
+    }
+    .sheet-checkbox label {
+      flex: 1;
+      margin: 0;
+      cursor: pointer;
+      font-weight: normal;
+    }
+    .sheet-info {
+      font-size: 11px;
+      color: #666;
+      margin-left: 20px;
+    }
+    .timer-inputs {
+      margin-bottom: 10px;
+    }
+    .timer-row {
+      display: flex;
+      align-items: center;
+      margin-bottom: 8px;
+      gap: 8px;
+    }
+    .timer-row label {
+      flex: 0 0 70px;
+      margin: 0;
+      font-size: 12px;
+    }
+    .timer-row input[type="number"] {
+      flex: 0 0 50px;
+      padding: 4px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+    .download-btn {
+      flex: 0 0 70px;
+      padding: 4px 8px;
+      background-color: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .download-btn:hover {
+      background-color: #1976D2;
+    }
+    .download-all-btn {
+      width: 100%;
+      padding: 8px;
+      background-color: #FF9800;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      margin-bottom: 15px;
+    }
+    .download-all-btn:hover {
+      background-color: #F57C00;
+    }
+    .download-all-btn:nth-of-type(2) {
+      background-color: #9C27B0;
+      margin-bottom: 10px;
+    }
+    .download-all-btn:nth-of-type(2):hover {
+      background-color: #7B1FA2;
+    }
+    .option-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+      padding: 8px;
+      border-radius: 4px;
+      background-color: #f8f9fa;
+    }
+    .option-header input[type="radio"] {
+      margin-right: 8px;
+    }
+    .option-header label {
+      flex: 1;
+      margin: 0;
+      cursor: pointer;
+      font-weight: normal;
+    }
+    .option-controls {
+      margin-left: 20px;
+      margin-bottom: 15px;
+      padding: 10px;
+      border-left: 3px solid #4CAF50;
+      background-color: #f8f9fa;
+      border-radius: 0 4px 4px 0;
+    }
+    .time-period-selection label {
+      display: block;
+      margin-bottom: 10px;
+      font-weight: bold;
+    }
+    .period-checkboxes {
+      margin-bottom: 15px;
+    }
+    .period-checkbox {
+      display: flex;
+      align-items: flex-start;
+      margin-bottom: 10px;
+      padding: 8px;
+      border-radius: 4px;
+      background-color: white;
+      border: 1px solid #e0e0e0;
+    }
+    .period-checkbox:hover {
+      background-color: #f8f9fa;
+      border-color: #4CAF50;
+    }
+    .period-checkbox input[type="checkbox"] {
+      margin-right: 0;
+      margin-top: 2px;
+      flex-shrink: 0;
+    }
+    .period-checkbox label {
+      margin: 0;
+      font-weight: bold;
+      cursor: pointer;
+      display: block;
+    }
+    .sheet-select {
+      margin-left: auto;
+      margin-top: 2px;
+      font-size: 11px;
+      width: 100px;
+      padding: 4px;
+      border: 1px solid #ccc;
+      border-radius: 3px;
+      flex-shrink: 0;
+      align-self: flex-start;
+    }
+    .file-section[disabled] {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+    .advanced-settings {
+      margin: 10px 0;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background-color: #f9f9f9;
+    }
+    .advanced-settings summary {
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: bold;
+      color: #666;
+      background-color: #f0f0f0;
+      border-radius: 4px 4px 0 0;
+    }
+    .advanced-settings summary:hover {
+      background-color: #e0e0e0;
+    }
+    .advanced-content {
+      padding: 12px;
+    }
+    .advanced-content label {
+      font-size: 12px;
+      color: #666;
+      margin-bottom: 8px;
+    }
+    .tooltip {
+      position: relative;
+      cursor: help;
+    }
+    .tooltip .tooltiptext {
+      visibility: hidden;
+      width: 250px;
+      background-color: #333;
+      color: #fff;
+      text-align: left;
+      border-radius: 6px;
+      padding: 8px;
+      position: absolute;
+      z-index: 1;
+      bottom: 125%;
+      left: 50%;
+      margin-left: -125px;
+      opacity: 0;
+      transition: opacity 0.3s;
+      font-size: 11px;
+      line-height: 1.3;
+    }
+    .tooltip .tooltiptext::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -5px;
+      border-width: 5px;
+      border-style: solid;
+      border-color: #333 transparent transparent transparent;
+    }
+    .tooltip:hover .tooltiptext {
+      visibility: visible;
+      opacity: 1;
+    }
+    .inline-progress {
+      display: none;
+      margin: 8px 0;
+      padding: 8px;
+      background-color: #f0f8ff;
+      border: 1px solid #2196F3;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #1976D2;
+    }
+    .inline-progress.show {
+      display: block;
+    }
+    .progress-bar {
+      width: 100%;
+      height: 4px;
+      background-color: #e0e0e0;
+      border-radius: 2px;
+      margin-top: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background-color: #2196F3;
+      border-radius: 2px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+  </style>
+</head>
+<body>
+  <h2>PowerBI Excel Processor</h2>
+  <div style="font-size: 12px; color: #666; margin-bottom: 15px;">
+    Download 3 Excel files from PowerBI and replace sheets in destination file
+  </div>
+  
+  <!-- Step 1: Output File Selection -->
+  <div class="file-section">
+    <label for="outFile">1. Select Output File (Excel):</label>
+    <div id="rememberedOutFile" class="remembered-file" style="display: none;">
+      <span class="file-name"></span>
+      <button type="button" class="reuse-btn" data-type="out">Use Again</button>
+      <button type="button" class="clear-btn" data-type="out">×</button>
+    </div>
+    <input type="file" id="outFile" accept=".xlsx,.xls,.xlsb" />
+    
+    <!-- Inline Progress Indicator -->
+    <div id="inlineProgress" class="inline-progress">
+      <div id="progressText">Loading file...</div>
+      <div class="progress-bar">
+        <div id="progressFill" class="progress-fill"></div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Step 2: PowerBI File Selection -->
+  <div class="file-section" id="dataSourceSection">
+    <label>2. Times:</label>
+    
+    <div id="powerbiControls" class="option-controls" style="display: block;">
+      <div class="time-period-selection">
+        <div class="period-checkboxes" id="periodCheckboxes">
+          <!-- Files will be dynamically generated -->
+        </div>
+        
+        <div style="font-size: 11px; color: #666; margin-top: 8px;">
+          ℹ️ Each file will be downloaded from PowerBI and data will replace the selected target sheet
+        </div>
+      </div>
+    </div>
+  </div>
+  
+  <!-- Step 3: Sheet Validation -->
+  <div class="file-section" id="destSheetSection" style="display: none;">
+    <label id="destSheetLabel">3. Sheet Mapping Validation:</label>
+    <div style="font-size: 12px; color: #666; margin-bottom: 8px;">
+      Verify that target sheets exist in your destination file:
+    </div>
+    <div id="destSheets" class="sheet-checkboxes"></div>
+  </div>
+  
+  <!-- Step 4: Process Button -->
+  <div class="file-section">
+    <button id="processBtn" disabled>Select Output File First</button>
+    <div style="font-size: 11px; color: #666; margin-top: 8px;">
+      This will download the selected PowerBI files and replace data in the corresponding sheets of your destination Excel file.
+    </div>
+    
+    <!-- Manual Token Input (Hidden by default) -->
+    <details class="advanced-settings" style="margin-top: 10px;">
+      <summary>🔧 Advanced: Manual Token Input</summary>
+      <div class="advanced-content">
+        <label for="manualToken">PowerBI Bearer Token (if auto-detection fails):</label>
+        <textarea id="manualToken" 
+                  placeholder="Paste PowerBI bearer token here... 
+Instructions:
+1. Open PowerBI Developer Tools (F12)
+2. Go to Network tab
+3. Click on a report visual
+4. Find a request to *.analysis.windows.net
+5. Copy the 'Authorization: Bearer xxx' token value"
+                  style="width: 100%; height: 80px; font-size: 10px; margin-bottom: 8px;"></textarea>
+        <button id="testTokenBtn" type="button" style="font-size: 11px; padding: 4px 8px;">Test Token</button>
+        <div id="tokenStatus" style="font-size: 10px; margin-top: 5px;"></div>
+      </div>
+    </details>
+  </div>
+  
+  <div id="status" class="status"></div>
+  
+  <script src="libs/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <script src="excel-processor.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
