@@ -20,7 +20,7 @@ const destSheetSection = document.getElementById('destSheetSection');
 const destSheets = document.getElementById('destSheets');
 
 // Initialize extension
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   initializeExtension();
   setupEventListeners();
   loadRememberedFiles();
@@ -29,31 +29,31 @@ document.addEventListener('DOMContentLoaded', function() {
 function initializeExtension() {
   // Show PowerBI controls by default
   powerbiControls.style.display = 'block';
-  
+
   // Generate period checkboxes for the 3 PowerBI files
   generatePowerBIFileCheckboxes();
-  
+
   console.log('Extension initialized for PowerBI 3-file workflow');
 }
 
 function setupEventListeners() {
   // Output file selection
   outFileInput.addEventListener('change', handleOutputFileSelection);
-  
+
   // Process button
   processBtn.addEventListener('click', handleProcessFiles);
-  
+
   // Manual token testing
   const testTokenBtn = document.getElementById('testTokenBtn');
   if (testTokenBtn) {
     testTokenBtn.addEventListener('click', handleTestToken);
   }
-  
+
   // File memory system
   document.querySelectorAll('.reuse-btn').forEach(btn => {
     btn.addEventListener('click', handleReuseFile);
   });
-  
+
   document.querySelectorAll('.clear-btn').forEach(btn => {
     btn.addEventListener('click', handleClearFile);
   });
@@ -64,28 +64,25 @@ function generatePowerBIFileCheckboxes() {
     console.error('PowerBIConfig not loaded');
     return;
   }
-  
+
   const files = window.PowerBIConfig.files;
   periodCheckboxes.innerHTML = '';
-  
+
   Object.entries(files).forEach(([fileKey, config]) => {
     const checkboxDiv = document.createElement('div');
     checkboxDiv.className = 'period-checkbox';
-    
+
     // Get actual date ranges for this configuration
     const dateInfo = getDateRangeInfo(config);
-    
+
     checkboxDiv.innerHTML = `
-      <input type="checkbox" id="period_${fileKey}" value="${fileKey}" checked />
-      <div style="flex: 1; margin-left: 8px;">
-        <div style="font-size: 11px; color: #333; line-height: 1.3;">
-          <div><strong>Current:</strong> ${dateInfo.currentPeriod}</div>
-          <div><strong>Reference:</strong> ${dateInfo.referencePeriod}</div>
-          <div style="margin-top: 4px;"><strong>Target:</strong> ${config.targetSheet}</div>
-        </div>
+      <div style="font-size: 11px; line-height: 1.2;">
+        <strong style="color: #333;">${config.targetSheet}:</strong>
+        <span style="color: #f57c00;">${dateInfo.referencePeriod}</span> vs.
+        <span style="color: #2e7d32;">${dateInfo.currentPeriod}</span>
       </div>
     `;
-    
+
     periodCheckboxes.appendChild(checkboxDiv);
   });
 }
@@ -93,42 +90,34 @@ function generatePowerBIFileCheckboxes() {
 // Get formatted date range information for display
 function getDateRangeInfo(config) {
   try {
-    const currentStart = new Date(config.getCurrentStartDate());
-    const currentEnd = new Date(config.getCurrentEndDate());
-    const referenceStart = new Date(config.getReferenceStartDate());
-    const referenceEnd = new Date(config.getReferenceEndDate());
-    
+    const currentStart = config.getCurrentStartDate();
+    const currentEnd = config.getCurrentEndDate();
+    const referenceStart = config.getReferenceStartDate();
+    const referenceEnd = config.getReferenceEndDate();
+
     const formatDate = (date) => {
-      return date.toLocaleDateString('en-GB', { 
-        day: '2-digit',
+      const options = {
+        timeZone: 'Asia/Ho_Chi_Minh',
+        year: 'numeric',
         month: '2-digit',
-        year: 'numeric'
-      });
+        day: '2-digit'
+      };
+
+      return date.toLocaleDateString('en-GB', options);
     };
-    
+
     const formatDateRange = (startDate, endDate) => {
       const start = formatDate(startDate);
       const end = formatDate(endDate);
-      
-      // If same date, show just one date
-      if (start === end) {
-        return start;
-      }
-      
-      // If same year, don't repeat it
-      if (startDate.getFullYear() === endDate.getFullYear()) {
-        const startShort = startDate.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit' });
-        return `${startShort} - ${end}`;
-      }
-      
+
       return `${start} - ${end}`;
     };
-    
+
     return {
       currentPeriod: formatDateRange(currentStart, currentEnd),
       referencePeriod: formatDateRange(referenceStart, referenceEnd)
     };
-    
+
   } catch (error) {
     console.error('Error getting date range info:', error);
     return {
@@ -141,35 +130,35 @@ function getDateRangeInfo(config) {
 async function handleOutputFileSelection(event) {
   const file = event.target.files[0];
   if (!file) return;
-  
+
   try {
     showProgress('Loading output file...');
-    
+
     // Read the output file
     const buffer = await window.ExcelProcessor.readFileAsArrayBuffer(file);
     outputWorkbook = window.ExcelProcessor.readExcelFile(buffer, file.name);
     outputFileName = file.name;
-    
+
     console.log('Output file loaded:', outputWorkbook.SheetNames);
-    
+
     // Update sheet selectors with available sheets
     updateSheetSelectors(outputWorkbook.SheetNames);
-    
+
     // Show sheet mapping validation
     displaySheetMappingValidation(outputWorkbook.SheetNames);
-    
+
     // Show destination sheet section
     destSheetSection.style.display = 'block';
-    
+
     // Enable process button if we have valid configuration
     updateProcessButtonState();
-    
+
     // Remember this file
     rememberFile('out', file.name, buffer);
-    
+
     hideProgress();
     showStatus('Output file loaded successfully', 'success');
-    
+
   } catch (error) {
     console.error('Error loading output file:', error);
     hideProgress();
@@ -182,7 +171,7 @@ function updateSheetSelectors(availableSheets) {
   document.querySelectorAll('.sheet-select').forEach(select => {
     const currentValue = select.value;
     select.innerHTML = '';
-    
+
     availableSheets.forEach(sheetName => {
       const option = document.createElement('option');
       option.value = sheetName;
@@ -195,24 +184,24 @@ function updateSheetSelectors(availableSheets) {
 
 function displaySheetMappingValidation(availableSheets) {
   if (!window.PowerBIConfig) return;
-  
+
   const destSheets = document.getElementById('destSheets');
   destSheets.innerHTML = '';
-  
+
   const files = window.PowerBIConfig.files;
   Object.entries(files).forEach(([fileKey, config]) => {
     // Get current target sheet from dropdown (if exists) or default from config
     const sheetSelect = document.getElementById(`sheet_${fileKey}`);
     const targetSheet = sheetSelect ? sheetSelect.value : config.targetSheet;
     const exists = availableSheets.includes(targetSheet);
-    
+
     const validationDiv = document.createElement('div');
     validationDiv.className = 'sheet-checkbox';
-    
+
     const statusIcon = exists ? '✅' : '❌';
     const statusClass = exists ? 'success' : 'error';
     const statusText = exists ? 'Found' : 'Missing';
-    
+
     validationDiv.innerHTML = `
       <div style="display: flex; align-items: center; width: 100%;">
         <span style="margin-right: 8px; font-size: 14px;">${statusIcon}</span>
@@ -222,7 +211,7 @@ function displaySheetMappingValidation(availableSheets) {
         </div>
       </div>
     `;
-    
+
     if (!exists) {
       validationDiv.style.backgroundColor = '#ffebee';
       validationDiv.style.borderLeft = '3px solid #f44336';
@@ -230,24 +219,24 @@ function displaySheetMappingValidation(availableSheets) {
       validationDiv.style.backgroundColor = '#e8f5e8';
       validationDiv.style.borderLeft = '3px solid #4CAF50';
     }
-    
+
     destSheets.appendChild(validationDiv);
   });
-  
+
   // Show available sheets if there are missing mappings
   const missingSheets = Object.entries(files).filter(([fileKey, config]) => {
     const sheetSelect = document.getElementById(`sheet_${fileKey}`);
     const targetSheet = sheetSelect ? sheetSelect.value : config.targetSheet;
     return !availableSheets.includes(targetSheet);
   });
-  
+
   if (missingSheets.length > 0) {
     const availableSheetsDiv = document.createElement('div');
     availableSheetsDiv.className = 'sheet-checkbox';
     availableSheetsDiv.style.backgroundColor = '#f0f8ff';
     availableSheetsDiv.style.borderLeft = '3px solid #2196F3';
     availableSheetsDiv.style.marginTop = '10px';
-    
+
     availableSheetsDiv.innerHTML = `
       <div>
         <strong>📋 Available sheets in your file:</strong>
@@ -257,7 +246,7 @@ function displaySheetMappingValidation(availableSheets) {
         </div>
       </div>
     `;
-    
+
     destSheets.appendChild(availableSheetsDiv);
   }
 }
@@ -265,9 +254,9 @@ function displaySheetMappingValidation(availableSheets) {
 function updateProcessButtonState() {
   const hasOutputFile = outputWorkbook !== null;
   const hasSelectedFiles = getSelectedPowerBIFiles().length > 0;
-  
+
   processBtn.disabled = !hasOutputFile || !hasSelectedFiles || isProcessing;
-  
+
   if (hasOutputFile && hasSelectedFiles) {
     processBtn.textContent = 'Download & Process Files';
   } else if (!hasOutputFile) {
@@ -278,35 +267,40 @@ function updateProcessButtonState() {
 }
 
 function getSelectedPowerBIFiles() {
-  const selected = [];
-  document.querySelectorAll('input[type="checkbox"][id^="period_"]:checked').forEach(checkbox => {
-    selected.push(checkbox.value);
-  });
-  return selected;
+  // Since checkboxes are removed, return all available PowerBI files
+  if (!window.PowerBIConfig || !window.PowerBIConfig.files) {
+    return [];
+  }
+  return Object.keys(window.PowerBIConfig.files);
 }
 
 function getCurrentSheetMapping() {
   const mapping = {};
-  
-  document.querySelectorAll('input[type="checkbox"][id^="period_"]:checked').forEach(checkbox => {
-    const fileKey = checkbox.value;
-    const sheetSelect = document.getElementById(`sheet_${fileKey}`);
-    if (sheetSelect) {
-      mapping[fileKey] = sheetSelect.value;
-    }
-  });
-  
+
+  // Since checkboxes are removed, map all available PowerBI files
+  if (window.PowerBIConfig && window.PowerBIConfig.files) {
+    Object.keys(window.PowerBIConfig.files).forEach(fileKey => {
+      const sheetSelect = document.getElementById(`sheet_${fileKey}`);
+      if (sheetSelect) {
+        mapping[fileKey] = sheetSelect.value;
+      } else {
+        // Use default target sheet from config
+        mapping[fileKey] = window.PowerBIConfig.files[fileKey].targetSheet;
+      }
+    });
+  }
+
   return mapping;
 }
 
 function updateSheetMappingFromSelectors() {
   if (!window.PowerBIConfig) return;
-  
+
   // Update the PowerBI configuration based on user selections
   document.querySelectorAll('.sheet-select').forEach(select => {
     const fileKey = select.id.replace('sheet_', '');
     const selectedSheet = select.value;
-    
+
     if (window.PowerBIConfig.files[fileKey]) {
       window.PowerBIConfig.files[fileKey].targetSheet = selectedSheet;
       // Also update the global sheet mapping
@@ -319,31 +313,31 @@ function updateSheetMappingFromSelectors() {
 
 async function handleProcessFiles() {
   if (isProcessing) return;
-  
+
   try {
     isProcessing = true;
     updateProcessButtonState();
-    
+
     const selectedFiles = getSelectedPowerBIFiles();
     const sheetMapping = getCurrentSheetMapping();
-    
+
     console.log('Starting PowerBI download process:', { selectedFiles, sheetMapping });
-    
+
     showStatus('Connecting to PowerBI...', 'info');
-    
+
     // Send message to content script to start download
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
+
     if (!tab.url.includes('app.powerbi.com')) {
       throw new Error('❌ Please navigate to app.powerbi.com first');
     }
-    
+
     // Check if user is on a report page
     if (!tab.url.includes('/reports/') && !tab.url.includes('/groups/')) {
       showStatus('⚠️ For best results, please open a specific PowerBI report before downloading', 'info');
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    
+
     // Inject debug helper for better troubleshooting
     try {
       await chrome.scripting.executeScript({
@@ -354,7 +348,7 @@ async function handleProcessFiles() {
     } catch (error) {
       console.warn('Could not inject debug helper:', error);
     }
-    
+
     // Get file configurations to pass to content script
     const fileConfigs = selectedFiles.map(fileKey => {
       if (window.PowerBIConfig && window.PowerBIConfig.files[fileKey]) {
@@ -362,10 +356,10 @@ async function handleProcessFiles() {
       }
       throw new Error(`Configuration not found for file: ${fileKey}`);
     });
-    
+
     // Check for manual token
     const manualToken = document.getElementById('manualToken')?.value?.trim();
-    
+
     // Inject content script and start download
     const response = await chrome.tabs.sendMessage(tab.id, {
       action: 'downloadPowerBIFiles',
@@ -373,49 +367,49 @@ async function handleProcessFiles() {
       fileConfigs: fileConfigs,
       manualToken: manualToken || null
     });
-    
+
     if (!response.success) {
       throw new Error(response.error || 'Failed to download PowerBI files');
     }
-    
+
     showStatus('Processing downloaded files...', 'info');
-    
+
     // Process the downloaded files
     const processingResult = await window.ExcelProcessor.processDownloadedPowerBIFiles(
       outputWorkbook,
       response.data,
       sheetMapping
     );
-    
+
     if (!processingResult.success) {
       throw new Error(processingResult.error || 'Failed to process files');
     }
-    
+
     // Generate output filename
     const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
     const processedFileName = outputFileName.replace(/\.([^.]+)$/, `_processed_${timestamp}.$1`);
-    
+
     // Download the processed file
     window.ExcelProcessor.downloadExcelFile(outputWorkbook, processedFileName);
-    
+
     // Show success message with placeholder info
     const placeholderCount = processingResult.results.filter(r => r.isPlaceholder).length;
     const successCount = processingResult.results.filter(r => r.success && !r.isPlaceholder).length;
-    
+
     let successMessage = `✅ Processing completed: ${successCount} files downloaded`;
     if (placeholderCount > 0) {
       successMessage += `, ${placeholderCount} placeholder(s) created`;
     }
     successMessage += `\n\nUpdated sheets: ${processingResult.processedSheets.join(', ')}`;
-    
+
     if (placeholderCount > 0) {
       successMessage += `\n\n⚠️ Some files failed to download and were replaced with placeholders. Check the processed file for details.`;
     }
-    
+
     showStatus(successMessage, 'success');
-    
+
     console.log('Processing completed successfully:', processingResult);
-    
+
   } catch (error) {
     console.error('Error processing files:', error);
     showStatus(`❌ Error: ${error.message}`, 'error');
@@ -429,7 +423,7 @@ async function handleProcessFiles() {
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'downloadProgress') {
     const progress = message.progress;
-    
+
     switch (progress.status) {
       case 'downloading':
         showStatus(`📥 Starting download: ${progress.fileName}...`, 'info');
@@ -449,17 +443,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // Handle token detection notification
 function handleTokenDetected(tokenInfo) {
   console.log('🔔 PowerBI token detected:', tokenInfo);
-  
+
   // Show notification
   showStatus(`🔐 PowerBI token detected from ${getApiName(tokenInfo.apiUrl)}`, 'success');
-  
+
   // Hide manual token section
   const manualTokenSection = document.querySelector('details.advanced-settings');
   if (manualTokenSection) {
     manualTokenSection.style.display = 'none';
     console.log('Manual token section hidden - automatic token detected');
   }
-  
+
   // Update token status if in manual section
   const tokenStatus = document.getElementById('tokenStatus');
   if (tokenStatus) {
@@ -489,7 +483,7 @@ function showStatus(message, type) {
   statusDiv.textContent = message;
   statusDiv.className = `status ${type}`;
   statusDiv.style.display = 'block';
-  
+
   // Auto-hide success messages after 5 seconds
   if (type === 'success') {
     setTimeout(() => {
@@ -508,7 +502,7 @@ function rememberFile(type, filename, buffer) {
       timestamp: Date.now()
     }
   });
-  
+
   updateRememberedFileDisplay(type, filename);
 }
 
@@ -531,20 +525,20 @@ function loadRememberedFiles() {
 function handleReuseFile(event) {
   const type = event.target.getAttribute('data-type');
   const key = `remembered_${type}_file`;
-  
+
   chrome.storage.local.get([key], (result) => {
     if (result[key]) {
       const buffer = new Uint8Array(result[key].buffer);
-      
+
       if (type === 'out') {
         try {
           outputWorkbook = window.ExcelProcessor.readExcelFile(buffer, result[key].filename);
           outputFileName = result[key].filename;
-          
+
           updateSheetSelectors(outputWorkbook.SheetNames);
           destSheetSection.style.display = 'block';
           updateProcessButtonState();
-          
+
           showStatus('Reused remembered output file', 'success');
         } catch (error) {
           showStatus(`Error loading remembered file: ${error.message}`, 'error');
@@ -557,14 +551,14 @@ function handleReuseFile(event) {
 function handleClearFile(event) {
   const type = event.target.getAttribute('data-type');
   const key = `remembered_${type}_file`;
-  
+
   chrome.storage.local.remove([key]);
-  
+
   const rememberedDiv = document.getElementById(`remembered${type.charAt(0).toUpperCase() + type.slice(1)}File`);
   if (rememberedDiv) {
     rememberedDiv.style.display = 'none';
   }
-  
+
   if (type === 'out') {
     outputWorkbook = null;
     outputFileName = '';
@@ -577,33 +571,33 @@ function handleTestToken() {
   const tokenInput = document.getElementById('manualToken');
   const tokenStatus = document.getElementById('tokenStatus');
   const token = tokenInput.value.trim();
-  
+
   if (!token) {
     tokenStatus.innerHTML = '<span style="color: red;">❌ Please enter a token</span>';
     return;
   }
-  
+
   if (token.length < 50) {
     tokenStatus.innerHTML = '<span style="color: red;">❌ Token too short (should be 200+ characters)</span>';
     return;
   }
-  
+
   // Basic token format validation
   if (!token.match(/^[A-Za-z0-9\-_\.]+$/)) {
     tokenStatus.innerHTML = '<span style="color: red;">❌ Invalid token format</span>';
     return;
   }
-  
+
   tokenStatus.innerHTML = '<span style="color: green;">✅ Token format looks valid</span>';
   console.log('Manual token set:', token.substring(0, 20) + '...');
 }
 
 // Add event listeners for dynamic elements
-document.addEventListener('change', function(event) {
+document.addEventListener('change', function (event) {
   if (event.target.type === 'checkbox' && event.target.id.startsWith('period_')) {
     updateProcessButtonState();
   }
-  
+
   // Update validation when sheet mapping changes
   if (event.target.classList.contains('sheet-select')) {
     updateSheetMappingFromSelectors();

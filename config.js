@@ -1,4 +1,5 @@
 // PowerBI Configuration for 3 File Downloads and Sheet Mapping
+const today = new Date();
 const POWERBI_CONFIG = {
   // Configuration for 3 PowerBI files to download
   files: {
@@ -10,27 +11,19 @@ const POWERBI_CONFIG = {
       targetSheet: 'Day_Le', // Default target sheet name
       getCurrentStartDate: () => {
         // Yesterday (21/06/2025 if today is 22/06/2025)
-        const today = new Date();
-        const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-        return date.toISOString().split('.')[0];
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
       },
       getCurrentEndDate: () => {
         // Same as start date - single day (21/06/2025)
-        const today = new Date();
-        const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-        return date.toISOString().split('.')[0];
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
       },
       getReferenceStartDate: () => {
         // Today last year (22/06/2024 if today is 22/06/2025)
-        const today = new Date();
-        const date = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
-        return date.toISOString().split('.')[0];
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
       },
       getReferenceEndDate: () => {
         // Same as start date - single day (22/06/2024)
-        const today = new Date();
-        const date = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
-        return date.toISOString().split('.')[0];
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
       }
     },
     'MTD_Le': {
@@ -41,27 +34,19 @@ const POWERBI_CONFIG = {
       targetSheet: 'MTD_Le',
       getCurrentStartDate: () => {
         // First day of current month (01/06/2025)
-        const today = new Date();
-        const date = new Date(today.getFullYear(), today.getMonth(), 1);
-        return date.toISOString().split('.')[0];
+        return new Date(today.getFullYear(), today.getMonth(), 1);
       },
       getCurrentEndDate: () => {
         // Yesterday (21/06/2025 if today is 22/06/2025)
-        const today = new Date();
-        const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-        return date.toISOString().split('.')[0];
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
       },
       getReferenceStartDate: () => {
         // First day of same month last year (01/06/2024)
-        const today = new Date();
-        const date = new Date(today.getFullYear() - 1, today.getMonth(), 1);
-        return date.toISOString().split('.')[0];
+        return new Date(today.getFullYear() - 1, today.getMonth(), 1);
       },
       getReferenceEndDate: () => {
         // Yesterday last year (21/06/2024)
-        const today = new Date();
-        const date = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() - 1);
-        return date.toISOString().split('.')[0];
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() - 1);
       }
     },
     '09.06-now': {
@@ -71,28 +56,22 @@ const POWERBI_CONFIG = {
       fileName: '09.06-now_Report.xlsx',
       targetSheet: '09.06-now',
       getCurrentStartDate: () => {
-        // June 9th current year (09/06/2025)
-        const today = new Date();
-        const date = new Date(today.getFullYear(), today.getMonth(), 9);
-        return date.toISOString().split('.')[0];
+        // 09/06/2025 07:00:00 GMT+7
+        // month is 0-indexed in JavaScript
+        return new Date(today.getFullYear(), 5, 9);
       },
       getCurrentEndDate: () => {
         // Yesterday (21/06/2025 if today is 22/06/2025)
-        const today = new Date();
-        const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
-        return date.toISOString().split('.')[0];
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
       },
       getReferenceStartDate: () => {
-        // June 10th last year (10/06/2024)
-        const today = new Date();
-        const date = new Date(today.getFullYear() - 1, today.getMonth(), 10);
-        return date.toISOString().split('.')[0];
+        // 10/06/2024 07:00:00 GMT+7
+        // month is 0-indexed in JavaScript
+        return new Date(today.getFullYear() - 1, 5, 10);
       },
       getReferenceEndDate: () => {
         // Today last year (22/06/2024)
-        const today = new Date();
-        const date = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
-        return date.toISOString().split('.')[0];
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
       }
     }
   },
