@@ -285,13 +285,56 @@ Try:
 async function loadXLSXLibrary() {
   return new Promise((resolve, reject) => {
     try {
+      // Check if already loaded
+      if (typeof XLSX !== 'undefined' || window.XLSX) {
+        console.log('XLSX library already available');
+        resolve();
+        return;
+      }
+
       const script = document.createElement('script');
       script.src = chrome.runtime.getURL('libs/xlsx.full.min.js');
       script.onload = () => {
-        console.log('XLSX library loaded in content script');
-        resolve();
+        console.log('XLSX library script loaded in content script');
+
+        // Wait a moment for the library to initialize and try multiple ways to access it
+        setTimeout(() => {
+          // Try multiple ways to access XLSX
+          if (typeof XLSX !== 'undefined') {
+            console.log('XLSX library confirmed available via global XLSX');
+            window.XLSX = XLSX; // Ensure it's on window object
+            resolve();
+          } else if (window.XLSX) {
+            console.log('XLSX library confirmed available via window.XLSX');
+            resolve();
+          } else if (typeof SheetJS !== 'undefined') {
+            console.log('XLSX library available via SheetJS');
+            window.XLSX = SheetJS;
+            resolve();
+          } else {
+            // Try to manually execute the script content
+            console.log('Attempting alternative XLSX library access...');
+            try {
+              // Check if there are any global objects added
+              const possibleXLSX = window.XLSX || globalThis.XLSX ||
+                (typeof exports !== 'undefined' ? exports.XLSX : null);
+              if (possibleXLSX) {
+                window.XLSX = possibleXLSX;
+                console.log('XLSX library found via alternative method');
+                resolve();
+              } else {
+                console.error('XLSX library loaded but not accessible through any method');
+                reject(new Error('XLSX library not accessible after loading'));
+              }
+            } catch (altError) {
+              console.error('Alternative XLSX access failed:', altError);
+              reject(new Error('XLSX library not available after loading'));
+            }
+          }
+        }, 100);
       };
-      script.onerror = () => {
+      script.onerror = (error) => {
+        console.error('Failed to load XLSX library script:', error);
         reject(new Error('Failed to load XLSX library'));
       };
       document.head.appendChild(script);
@@ -385,15 +428,34 @@ async function convertDownloadedFilesToWorkbooks(downloadResults) {
   const workbooks = {};
 
   // Load XLSX library if not available
-  if (typeof XLSX === 'undefined') {
+  if (typeof XLSX === 'undefined' && !window.XLSX) {
+    console.log('Loading XLSX library...');
     await loadXLSXLibrary();
+
+    // Wait a bit more to ensure the library is fully loaded
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Check again if XLSX is available
+    if (typeof XLSX === 'undefined' && !window.XLSX) {
+      console.error('XLSX library failed to load properly');
+      return workbooks;
+    }
   }
+
+  // Use the available XLSX reference
+  const XLSXLib = window.XLSX || XLSX;
 
   for (const [fileKey, result] of Object.entries(downloadResults)) {
     if (result.success && result.data) {
       try {
+        // Double-check XLSX is available before using it
+        if (!XLSXLib) {
+          console.error(`XLSX library not available when processing ${fileKey}`);
+          continue;
+        }
+
         // Use XLSX library directly to read the file
-        const workbook = XLSX.read(result.data, {
+        const workbook = XLSXLib.read(result.data, {
           type: 'array',
           cellDates: true,
           cellNF: false,
@@ -412,16 +474,24 @@ async function convertDownloadedFilesToWorkbooks(downloadResults) {
 }
 
 // Create placeholder Excel data when download fails
-function createPlaceholderExcelData(config) {
+async function createPlaceholderExcelData(config) {
   try {
-    // Load XLSX library if available
-    if (typeof XLSX === 'undefined') {
-      console.warn('XLSX library not available for placeholder creation');
-      return new Uint8Array(0); // Empty array as fallback
+    // Ensure XLSX library is loaded
+    if (typeof XLSX === 'undefined' && !window.XLSX) {
+      console.log('Loading XLSX library for placeholder creation...');
+      await loadXLSXLibrary();
+
+      if (typeof XLSX === 'undefined' && !window.XLSX) {
+        console.warn('XLSX library not available for placeholder creation');
+        return new Uint8Array(0); // Empty array as fallback
+      }
     }
 
+    // Use the available XLSX reference
+    const XLSXLib = window.XLSX || XLSX;
+
     // Create a simple Excel workbook with placeholder data
-    const wb = XLSX.utils.book_new();
+    const wb = XLSXLib.utils.book_new();
 
     // Create placeholder data
     const placeholderData = [
@@ -433,13 +503,13 @@ function createPlaceholderExcelData(config) {
     ];
 
     // Create worksheet
-    const ws = XLSX.utils.aoa_to_sheet(placeholderData);
+    const ws = XLSXLib.utils.aoa_to_sheet(placeholderData);
 
     // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, 'PlaceholderData');
+    XLSXLib.utils.book_append_sheet(wb, ws, 'PlaceholderData');
 
     // Convert to array buffer
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const wbout = XLSXLib.write(wb, { bookType: 'xlsx', type: 'array' });
 
     console.log(`Created placeholder Excel data for ${config.displayName}`);
     return new Uint8Array(wbout);
@@ -517,7 +587,7 @@ async function downloadMultiplePowerBIFilesWithConfigs(fileConfigs, onProgress) 
 
       // Create placeholder data for destination file instead of failing
       console.log(`Creating placeholder data for ${config.displayName}...`);
-      const placeholderData = createPlaceholderExcelData(config);
+      const placeholderData = await createPlaceholderExcelData(config);
 
       const result = {
         success: true, // Mark as success so processing continues
@@ -585,16 +655,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     })
       .then(downloadResults => {
-        // Convert to workbooks
-        return convertDownloadedFilesToWorkbooks(downloadResults).then(workbooks => {
-          return { downloadResults, workbooks };
-        });
-      })
-      .then(({ downloadResults, workbooks }) => {
+        // Return raw download results - workbook conversion will be handled in popup
         const results = {
           downloadResults: downloadResults,
-          workbooks: workbooks,
-          success: Object.keys(workbooks).length > 0
+          success: Object.values(downloadResults).some(r => r.success)
         };
         sendResponse({ success: true, data: results });
       })
@@ -611,6 +675,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ success: true, tokenFound: !!token });
   }
 });
+
+// Initialize XLSX library early to prevent timing issues
+(async function initializeXLSXLibrary() {
+  try {
+    if (typeof XLSX === 'undefined') {
+      console.log('Pre-loading XLSX library...');
+      await loadXLSXLibrary();
+      console.log('XLSX library pre-loaded successfully');
+    }
+  } catch (error) {
+    console.warn('Failed to pre-load XLSX library:', error);
+  }
+})();
 
 // Extension ready - token will be retrieved from session storage when needed
 

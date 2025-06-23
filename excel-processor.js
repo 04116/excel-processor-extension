@@ -172,11 +172,16 @@ function copyDataToSheetSpecific(sourceWorkbook, targetWorkbook, sourceSheetName
   const XLSX = getXLSX();
 
   try {
+    console.log(`🔄 Starting data copy: ${sourceSheetName} → ${targetSheetName}`);
+    console.log(`  Column range: ${columnRange.start}-${columnRange.end} (${columnRange.startNum}-${columnRange.endNum})`);
+
     if (!sourceWorkbook.Sheets[sourceSheetName]) {
       throw new Error(`Source sheet "${sourceSheetName}" not found`);
     }
 
     let sourceSheet = sourceWorkbook.Sheets[sourceSheetName];
+    console.log(`  Source sheet range: ${sourceSheet['!ref']}`);
+
     // Unmerge source sheet
     sourceSheet = unmergeSheet(sourceSheet);
 
@@ -185,15 +190,26 @@ function copyDataToSheetSpecific(sourceWorkbook, targetWorkbook, sourceSheetName
     }
 
     let targetSheet = targetWorkbook.Sheets[targetSheetName];
+    console.log(`  Target sheet range before clear: ${targetSheet['!ref']}`);
+
     // Clear ONLY the detected column range, preserving other columns
     targetSheet = clearColumnRange(targetSheet, columnRange.start, columnRange.end);
+    console.log(`  Target sheet range after clear: ${targetSheet['!ref']}`);
 
     // Get source data
     const sourceData = XLSX.utils.sheet_to_json(sourceSheet, { header: 1, defval: '' });
+    console.log(`  Source data: ${sourceData.length} rows`);
+    if (sourceData.length > 0) {
+      console.log(`  First row: [${sourceData[0].slice(0, 5).join(', ')}...]`);
+      console.log(`  Sample data in column range:`, sourceData.slice(0, 3).map(row =>
+        row.slice(columnRange.startNum, columnRange.endNum + 1)
+      ));
+    }
 
     console.log(`Replacing data in columns ${columnRange.start}-${columnRange.end}, preserving other columns`);
 
     // Copy data to target sheet within detected column range only
+    let copiedCells = 0;
     for (let rowIndex = 0; rowIndex < sourceData.length; rowIndex++) {
       const row = sourceData[rowIndex];
       for (let colIndex = 0; colIndex < row.length; colIndex++) {
@@ -207,10 +223,17 @@ function copyDataToSheetSpecific(sourceWorkbook, targetWorkbook, sourceSheetName
               v: cellValue,
               t: typeof cellValue === 'number' ? 'n' : 's'
             };
+            copiedCells++;
+
+            // Debug first few cells
+            if (copiedCells <= 5) {
+              console.log(`  Cell copy: [${rowIndex},${colIndex}] → [${rowIndex},${targetColIndex}] (${cellAddress}) = "${cellValue}"`);
+            }
           }
         }
       }
     }
+    console.log(`  ✅ Copied ${copiedCells} cells from ${sourceData.length} rows`);
 
     // Preserve existing sheet range, only extend if necessary
     const existingRange = targetSheet['!ref'] ?
@@ -359,8 +382,8 @@ function replaceMatchingColumns(outputWorkbook, biWorkbooks, detectedColumns) {
   return results;
 }
 
-// Process PowerBI downloaded files and replace sheets in destination Excel file
-function processPowerBIFilesWithSheetMapping(outputWorkbook, downloadedWorkbooks, sheetMapping) {
+// Process PowerBI downloaded files and replace sheets in destination Excel file  
+function processPowerBIFilesWithSheetMapping(outputWorkbook, downloadedWorkbooks, sheetMapping, originalDownloadResults = null) {
   const results = [];
   const processedSheets = new Set();
 
@@ -369,12 +392,12 @@ function processPowerBIFilesWithSheetMapping(outputWorkbook, downloadedWorkbooks
   // Validate that all target sheets exist
   const sheetValidation = validateSheetMappingInWorkbook(outputWorkbook, sheetMapping);
   const invalidMappings = Object.entries(sheetValidation).filter(([_, validation]) => !validation.exists);
-  
+
   if (invalidMappings.length > 0) {
-    const missingSheets = invalidMappings.map(([fileKey, validation]) => 
+    const missingSheets = invalidMappings.map(([fileKey, validation]) =>
       `${fileKey} → ${validation.targetSheet}`
     ).join(', ');
-    
+
     throw new Error(`Target sheets not found in destination file: ${missingSheets}. Available sheets: ${outputWorkbook.SheetNames.join(', ')}`);
   }
 
@@ -384,7 +407,7 @@ function processPowerBIFilesWithSheetMapping(outputWorkbook, downloadedWorkbooks
       try {
         const sourceWorkbook = downloadedWorkbooks[fileKey];
         const sourceSheetName = sourceWorkbook.SheetNames[0]; // Use first sheet from downloaded file
-        
+
         console.log(`Processing ${fileKey}: ${sourceSheetName} → ${targetSheetName}`);
 
         // Detect column range in the source file
@@ -392,6 +415,8 @@ function processPowerBIFilesWithSheetMapping(outputWorkbook, downloadedWorkbooks
         if (!columnRange) {
           throw new Error(`No data columns detected in ${fileKey}`);
         }
+
+        console.log(`  Detected column range for ${fileKey}:`, columnRange);
 
         // Copy data to the target sheet, replacing only the detected columns
         copyDataToSheetSpecific(
@@ -408,10 +433,12 @@ function processPowerBIFilesWithSheetMapping(outputWorkbook, downloadedWorkbooks
           targetSheet: targetSheetName,
           success: true,
           columnRange: `${columnRange.start}-${columnRange.end}`,
-          message: `Successfully replaced columns ${columnRange.start}-${columnRange.end} in sheet ${targetSheetName}`
+          message: `Successfully replaced columns ${columnRange.start}-${columnRange.end} in sheet ${targetSheetName}`,
+          isPlaceholder: originalDownloadResults && originalDownloadResults[fileKey] ? originalDownloadResults[fileKey].isPlaceholder || false : false
         });
 
         processedSheets.add(targetSheetName);
+        console.log(`  ✅ Successfully processed ${fileKey} → ${targetSheetName}`);
 
       } catch (error) {
         console.error(`Failed to process ${fileKey}:`, error);
@@ -441,7 +468,7 @@ function processPowerBIFilesWithSheetMapping(outputWorkbook, downloadedWorkbooks
 function validateSheetMappingInWorkbook(outputWorkbook, sheetMapping) {
   const availableSheets = outputWorkbook.SheetNames;
   const validation = {};
-  
+
   Object.entries(sheetMapping).forEach(([fileKey, targetSheet]) => {
     validation[fileKey] = {
       targetSheet: targetSheet,
@@ -449,7 +476,7 @@ function validateSheetMappingInWorkbook(outputWorkbook, sheetMapping) {
       available: availableSheets
     };
   });
-  
+
   return validation;
 }
 
@@ -457,11 +484,70 @@ function validateSheetMappingInWorkbook(outputWorkbook, sheetMapping) {
 async function processDownloadedPowerBIFiles(outputWorkbook, downloadResults, sheetMapping) {
   try {
     // Convert download results to workbooks if needed
-    let downloadedWorkbooks = downloadResults;
-    
+    let downloadedWorkbooks = {};
+
     if (downloadResults.workbooks) {
-      // Results from downloadAndProcessPowerBIFiles
+      // Results from downloadAndProcessPowerBIFiles (old format)
       downloadedWorkbooks = downloadResults.workbooks;
+    } else if (downloadResults.downloadResults) {
+      // New format - need to convert raw data to workbooks
+      console.log('Converting downloaded files to workbooks...');
+      const XLSX = getXLSX();
+
+      for (const [fileKey, result] of Object.entries(downloadResults.downloadResults)) {
+        if (result.success && result.data) {
+          try {
+            console.log(`Converting ${fileKey} to workbook...`);
+
+            // Convert object back to Uint8Array if needed
+            let dataArray = result.data;
+            if (result.data.constructor.name === 'Object' && typeof result.data['0'] === 'number') {
+              // Data was serialized as object, convert back to Uint8Array
+              const dataLength = Object.keys(result.data).length;
+              dataArray = new Uint8Array(dataLength);
+              for (let i = 0; i < dataLength; i++) {
+                dataArray[i] = result.data[i];
+              }
+              console.log(`  Converted object to Uint8Array, length: ${dataArray.length}`);
+              console.log(`  First few bytes:`, Array.from(dataArray.slice(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' '));
+            }
+
+            const workbook = XLSX.read(dataArray, {
+              type: 'array',
+              cellDates: true,
+              cellNF: false,
+              cellStyles: false
+            });
+
+            downloadedWorkbooks[fileKey] = workbook;
+            console.log(`✅ Converted ${fileKey} to workbook with sheets:`, workbook.SheetNames);
+
+            // Debug: Check if workbook has data
+            if (workbook.SheetNames.length > 0) {
+              const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+              const range = firstSheet['!ref'];
+              console.log(`  Sheet range: ${range}`);
+              if (range) {
+                const dataArray = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+                console.log(`  Data rows: ${dataArray.length}, first few rows:`, dataArray.slice(0, 3));
+              }
+            }
+
+            // Save individual PowerBI file for inspection
+            try {
+              const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+              const filename = `powerbi_${fileKey}_${timestamp}.xlsx`;
+              downloadExcelFile(workbook, filename);
+              console.log(`📁 Saved PowerBI file: ${filename}`);
+            } catch (saveError) {
+              console.warn(`Could not save PowerBI file ${fileKey}:`, saveError);
+            }
+          } catch (error) {
+            console.error(`❌ Failed to convert ${fileKey} to workbook:`, error);
+            // Continue with other files even if one fails
+          }
+        }
+      }
     }
 
     // Validate sheet mapping
@@ -470,9 +556,10 @@ async function processDownloadedPowerBIFiles(outputWorkbook, downloadResults, sh
 
     // Process files with sheet mapping
     const processingResults = processPowerBIFilesWithSheetMapping(
-      outputWorkbook, 
-      downloadedWorkbooks, 
-      sheetMapping
+      outputWorkbook,
+      downloadedWorkbooks,
+      sheetMapping,
+      downloadResults.downloadResults
     );
 
     return {
