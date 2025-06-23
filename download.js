@@ -1,286 +1,3 @@
-function extractBearerToken() {
-  try {
-    console.log('Attempting to extract PowerBI bearer token...');
-
-    // Check for manual token first (highest priority)
-    if (window._manualPowerBIToken) {
-      console.log('Using manual token provided by user');
-      return window._manualPowerBIToken;
-    }
-
-    // Check for already captured token
-    if (window._capturedPowerBIToken) {
-      console.log('Using previously captured token');
-      return window._capturedPowerBIToken;
-    }
-
-    // Enhanced token extraction methods
-    const tokenSources = [
-      // Window object paths - check deeper PowerBI objects
-      () => window.__powerBIAccessToken,
-      () => window.powerBIAccessToken,
-      () => window.accessToken,
-      () => window.authToken,
-      () => window.pbiToken,
-      () => window.powerbi?.accessToken,
-      () => window.powerbi?.token,
-      () => window._powerBIContext?.accessToken,
-      () => window.powerBIContext?.accessToken,
-      () => window.powerBIGlobal?.accessToken,
-      () => window.microsoft?.powerbi?.accessToken,
-
-      // Check PowerBI app configuration objects
-      () => {
-        // Look for PowerBI config objects
-        for (const key of Object.keys(window)) {
-          if (key.toLowerCase().includes('powerbi') || key.toLowerCase().includes('pbi')) {
-            const obj = window[key];
-            if (obj && typeof obj === 'object') {
-              if (obj.accessToken) return obj.accessToken;
-              if (obj.token) return obj.token;
-              if (obj.authToken) return obj.authToken;
-            }
-          }
-        }
-        return null;
-      },
-
-      // Local storage
-      () => localStorage.getItem('powerbi_access_token'),
-      () => localStorage.getItem('access_token'),
-      () => localStorage.getItem('authToken'),
-
-      // Session storage
-      () => sessionStorage.getItem('powerbi_access_token'),
-      () => sessionStorage.getItem('access_token'),
-      () => sessionStorage.getItem('authToken'),
-
-      // Check for tokens in localStorage with various keys
-      () => {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && (key.includes('token') || key.includes('auth') || key.includes('powerbi'))) {
-            const value = localStorage.getItem(key);
-            if (value && typeof value === 'string' && value.length > 50) {
-              console.log(`Found token in localStorage: ${key}`);
-              return value;
-            }
-          }
-        }
-        return null;
-      },
-
-      // Extract from network requests (look for Authorization headers)
-      () => {
-        const scripts = document.querySelectorAll('script');
-        for (const script of scripts) {
-          if (script.textContent) {
-            const tokenMatch = script.textContent.match(/(?:bearer\s+|token['"]\s*:\s*['"])([A-Za-z0-9\-_\.]+)/i);
-            if (tokenMatch && tokenMatch[1] && tokenMatch[1].length > 50) {
-              console.log('Found token in script content');
-              return tokenMatch[1];
-            }
-          }
-        }
-        return null;
-      },
-
-      // Check for meta tags with token information
-      () => {
-        const metaTags = document.querySelectorAll('meta[name*="token"], meta[name*="auth"]');
-        for (const meta of metaTags) {
-          const content = meta.getAttribute('content');
-          if (content && content.length > 50) {
-            console.log(`Found token in meta tag: ${meta.name}`);
-            return content;
-          }
-        }
-        return null;
-      }
-    ];
-
-    // Try each token source
-    for (let i = 0; i < tokenSources.length; i++) {
-      try {
-        const token = tokenSources[i]();
-        if (token && typeof token === 'string' && token.length > 50) {
-          console.log(`Successfully extracted token using method ${i + 1}`);
-          return token;
-        }
-      } catch (e) {
-        // Continue to next method
-      }
-    }
-
-    // If no token found, try to extract from any fetch requests
-    console.log('No token found in standard locations, monitoring network requests...');
-
-    // Hook into fetch to capture authorization headers
-    const originalFetch = window.fetch;
-    let capturedToken = null;
-
-    window.fetch = function (...args) {
-      const result = originalFetch.apply(this, args);
-
-      // Check if this request has authorization header
-      if (args[1] && args[1].headers) {
-        const headers = args[1].headers;
-        if (headers.authorization || headers.Authorization) {
-          const authHeader = headers.authorization || headers.Authorization;
-          if (authHeader.startsWith('Bearer ')) {
-            capturedToken = authHeader.substring(7);
-            console.log('Captured token from fetch request');
-          }
-        }
-      }
-
-      return result;
-    };
-
-    // Restore original fetch after a short delay
-    setTimeout(() => {
-      window.fetch = originalFetch;
-    }, 5000);
-
-    return capturedToken;
-
-  } catch (e) {
-    console.error('Error extracting bearer token:', e);
-  }
-
-  console.warn('Could not find PowerBI authentication token. Make sure you are logged into PowerBI and on a report page.');
-  return null;
-}
-
-// Wait for and capture token from network requests with specific PowerBI API targeting
-async function waitForTokenFromNetworkRequests(timeoutMs = 10000) {
-  return new Promise((resolve) => {
-    console.log('Actively triggering PowerBI API calls to capture token...');
-
-    let tokenFound = false;
-
-    // Check if we already have a captured token
-    if (window._capturedPowerBIToken) {
-      console.log('Using already captured token');
-      resolve(window._capturedPowerBIToken);
-      return;
-    }
-
-    // Set timeout
-    setTimeout(() => {
-      if (!tokenFound) {
-        console.log('Token capture timeout reached');
-        resolve(null);
-      }
-    }, timeoutMs);
-
-    // Try to actively trigger PowerBI API calls
-    setTimeout(async () => {
-      if (!tokenFound) {
-        console.log('🎯 Attempting to trigger PowerBI API calls...');
-
-        try {
-          // Define PowerBI API endpoints that contain authentication tokens
-          const powerBIEndpoints = [
-            {
-              url: 'https://wabi-south-east-asia-b-primary-redirect.analysis.windows.net/explore/aiclient/copilotStatus',
-              method: 'GET',
-              name: 'copilotStatus'
-            },
-            {
-              url: 'https://wabi-south-east-asia-b-primary-redirect.analysis.windows.net/metadata/notificationInfo/notificationCenter/summary',
-              method: 'POST',
-              name: 'notificationInfo',
-              body: JSON.stringify({})
-            },
-            {
-              url: 'https://wabi-south-east-asia-b-primary-redirect.analysis.windows.net/metadata/people/userdetails',
-              method: 'POST',
-              name: 'userdetails',
-              body: JSON.stringify({})
-            }
-          ];
-
-          // Try each endpoint to trigger token capture
-          for (const endpoint of powerBIEndpoints) {
-            if (!tokenFound) {
-              console.log(`🎯 Triggering ${endpoint.name} API call...`);
-
-              const requestOptions = {
-                method: endpoint.method,
-                headers: {
-                  'Accept': 'application/json',
-                  'Content-Type': 'application/json'
-                },
-                credentials: 'include'
-              };
-
-              if (endpoint.body) {
-                requestOptions.body = endpoint.body;
-              }
-
-              // This will be intercepted by our hooks and capture the token
-              fetch(endpoint.url, requestOptions).catch(e => {
-                console.log(`${endpoint.name} call triggered (may fail, but should capture token)`);
-              });
-
-              // Small delay between API calls
-              await new Promise(resolve => setTimeout(resolve, 300));
-            }
-          }
-
-          // Check for token after all API calls
-          setTimeout(() => {
-            if (window._capturedPowerBIToken && !tokenFound) {
-              console.log('✅ Successfully captured token from triggered API calls');
-              tokenFound = true;
-              resolve(window._capturedPowerBIToken);
-            }
-          }, 1500);
-
-        } catch (error) {
-          console.log('Error triggering PowerBI API calls:', error);
-        }
-      }
-    }, 500);
-
-    // Try to trigger other PowerBI requests by simulating user interaction
-    setTimeout(() => {
-      if (!tokenFound) {
-        console.log('Attempting to trigger PowerBI requests via UI interaction...');
-
-        // Try clicking on PowerBI elements that might trigger API calls
-        const powerBISelectors = [
-          '[data-testid*="visual"]',
-          '.visual-container',
-          '.slicer-container',
-          '.exploration-container',
-          '[aria-label*="visual"]',
-          '.powerbi-visual'
-        ];
-
-        for (const selector of powerBISelectors) {
-          const elements = document.querySelectorAll(selector);
-          if (elements.length > 0) {
-            console.log(`Clicking on ${selector} to trigger API calls`);
-            elements[0].click();
-            break;
-          }
-        }
-
-        // Check for token after interaction
-        setTimeout(() => {
-          if (window._capturedPowerBIToken && !tokenFound) {
-            console.log('✅ Successfully captured token from UI interaction');
-            tokenFound = true;
-            resolve(window._capturedPowerBIToken);
-          }
-        }, 2000);
-      }
-    }, 2000);
-  });
-}
-
 function requestBodyForDownloadByTimePeriod(dateConfig) {
   const currentStartDate = dateConfig.getCurrentStartDate();
   const currentEndDate = dateConfig.getCurrentEndDate();
@@ -814,13 +531,7 @@ async function loadPowerBIConfig() {
 // Message handler for extension popup communication
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'downloadPowerBIFiles') {
-    const { selectedFiles, fileConfigs, manualToken } = message;
-
-    // Set manual token if provided
-    if (manualToken) {
-      console.log('Using manual token for downloads');
-      window._manualPowerBIToken = manualToken;
-    }
+    const { selectedFiles, fileConfigs } = message;
 
     // Use the provided file configurations directly
     downloadMultiplePowerBIFilesWithConfigs(fileConfigs, (progress) => {
@@ -974,89 +685,61 @@ async function downloadMultiplePowerBIFilesWithConfigs(fileConfigs, onProgress) 
   return results;
 }
 
-// Set up token capture immediately when script loads
-(function setupTokenCapture() {
-  console.log('Setting up PowerBI token capture...');
+// Scan session storage for PowerBI token
+function scanSessionStorageForToken() {
+  console.log('🔍 Scanning session storage for PowerBI token...');
 
-  // Hook fetch immediately with specific PowerBI API targeting
-  const originalFetch = window.fetch;
-  window.fetch = function (...args) {
-    const url = args[0];
+  try {
+    // Scan all session storage keys
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      const value = sessionStorage.getItem(key);
 
-    // Specifically target PowerBI API endpoints
-    if (url && typeof url === 'string' &&
-      (url.includes('analysis.windows.net') ||
-        url.includes('powerbi.com') ||
-        url.includes('copilotStatus') ||
-        url.includes('notificationInfo') ||
-        url.includes('userdetails'))) {
+      // Look for keys/values that contain homeAccountId (indicates PowerBI auth data)
+      if (key && value && (key.includes('homeAccountId') || value.includes('homeAccountId'))) {
+        console.log('🎯 Found session storage item with homeAccountId:', key);
 
-      console.log('🎯 Intercepting PowerBI API call:', url);
+        try {
+          // Try to parse as JSON to extract token
+          const parsed = JSON.parse(value);
 
-      // Check for authorization header
-      if (args[1] && args[1].headers) {
-        const headers = args[1].headers;
-        const authHeader = headers.authorization || headers.Authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-          const token = authHeader.substring(7);
-          if (token.length > 50) {
-            console.log('✅ Captured PowerBI token from PowerBI API:', url.substring(0, 100) + '...');
+          // Look for access token in various possible locations
+          const token = parsed.secret || parsed.accessToken || parsed.access_token ||
+            parsed.token || parsed.credentialType === 'AccessToken' && parsed.secret;
+
+          if (token && typeof token === 'string' && token.length > 50) {
+            console.log('✅ Found PowerBI token in session storage!');
             window._capturedPowerBIToken = token;
 
             // Notify extension popup about token detection
-            notifyTokenDetected(token, url);
+            notifyTokenDetected(token, 'sessionStorage');
+            return token;
           }
+
+        } catch (e) {
+          // Not JSON or other parse error, continue
+          console.log('🔍 Session storage item not JSON:', key);
         }
       }
     }
 
-    return originalFetch.apply(this, args);
-  };
+    console.log('❌ No PowerBI token found in session storage');
+    return null;
 
-  // Hook XMLHttpRequest immediately with PowerBI targeting
-  const originalXHROpen = XMLHttpRequest.prototype.open;
-  const originalXHRSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+  } catch (error) {
+    console.error('Error scanning session storage:', error);
+    return null;
+  }
+}
 
-  XMLHttpRequest.prototype.open = function (method, url, ...args) {
-    this._url = url;
-    this._method = method;
+// Set up token detection
+(function setupTokenCapture() {
+  console.log('Setting up PowerBI token detection...');
 
-    // Log PowerBI API calls
-    if (url && typeof url === 'string' &&
-      (url.includes('analysis.windows.net') ||
-        url.includes('powerbi.com') ||
-        url.includes('copilotStatus') ||
-        url.includes('notificationInfo') ||
-        url.includes('userdetails'))) {
-      console.log('🎯 Intercepting PowerBI XHR call:', method, url);
-    }
+  // First, try to find token in session storage immediately
+  scanSessionStorageForToken();
 
-    return originalXHROpen.apply(this, [method, url, ...args]);
-  };
-
-  XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
-    // Capture token from PowerBI API calls
-    if (name.toLowerCase() === 'authorization' && value.startsWith('Bearer ') &&
-      this._url && (this._url.includes('analysis.windows.net') ||
-        this._url.includes('powerbi.com') ||
-        this._url.includes('copilotStatus') ||
-        this._url.includes('notificationInfo') ||
-        this._url.includes('userdetails'))) {
-
-      const token = value.substring(7);
-      if (token.length > 50) {
-        console.log('✅ Captured PowerBI token from XHR PowerBI API:', this._url.substring(0, 100) + '...');
-        window._capturedPowerBIToken = token;
-
-        // Notify extension popup about token detection
-        notifyTokenDetected(token, this._url);
-      }
-    }
-
-    return originalXHRSetRequestHeader.apply(this, arguments);
-  };
-
-  console.log('PowerBI token capture hooks installed - monitoring PowerBI API calls');
+  console.log('PowerBI token detection ready');
 })();
 
 // Notify extension popup when token is detected
@@ -1125,3 +808,12 @@ window.downloadPowerBiReport = downloadExcelFile;
 window.downloadMultiplePowerBIFiles = downloadMultiplePowerBIFiles;
 window.convertDownloadedFilesToWorkbooks = convertDownloadedFilesToWorkbooks;
 window.downloadAndProcessPowerBIFiles = downloadAndProcessPowerBIFiles;
+
+// Listen for token search requests from popup
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'searchForToken') {
+    console.log('🔍 Token search requested - scanning session storage');
+    const token = scanSessionStorageForToken();
+    sendResponse({ success: true, tokenFound: !!token });
+  }
+});

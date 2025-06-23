@@ -262,31 +262,7 @@
         opacity: 0.6;
         pointer-events: none;
       }
-      .advanced-settings {
-        margin: 10px 0;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        background-color: #f9f9f9;
-      }
-      .advanced-settings summary {
-        padding: 8px 12px;
-        cursor: pointer;
-        font-weight: bold;
-        color: #666;
-        background-color: #f0f0f0;
-        border-radius: 4px 4px 0 0;
-      }
-      .advanced-settings summary:hover {
-        background-color: #e0e0e0;
-      }
-      .advanced-content {
-        padding: 12px;
-      }
-      .advanced-content label {
-        font-size: 12px;
-        color: #666;
-        margin-bottom: 8px;
-      }
+
       .tooltip {
         position: relative;
         cursor: help;
@@ -438,40 +414,6 @@
         This will download all three PowerBI files and replace data in the
         corresponding sheets of your destination Excel file.
       </div>
-
-      <!-- Manual Token Input (Hidden by default) -->
-      <details class="advanced-settings" style="margin-top: 10px">
-        <summary>🔧 Advanced: Manual Token Input</summary>
-        <div class="advanced-content">
-          <label for="manualToken"
-            >PowerBI Bearer Token (if auto-detection fails):</label
-          >
-          <textarea
-            id="manualToken"
-            placeholder="Paste PowerBI bearer token here...
-Instructions:
-1. Open PowerBI Developer Tools (F12)
-2. Go to Network tab
-3. Click on a report visual
-4. Find a request to *.analysis.windows.net
-5. Copy the 'Authorization: Bearer xxx' token value"
-            style="
-              width: 100%;
-              height: 80px;
-              font-size: 10px;
-              margin-bottom: 8px;
-            "
-          ></textarea>
-          <button
-            id="testTokenBtn"
-            type="button"
-            style="font-size: 11px; padding: 4px 8px"
-          >
-            Test Token
-          </button>
-          <div id="tokenStatus" style="font-size: 10px; margin-top: 5px"></div>
-        </div>
-      </details>
     </div>
 
     <div id="status" class="status"></div>

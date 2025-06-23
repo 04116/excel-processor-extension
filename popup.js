@@ -49,11 +49,7 @@ function setupEventListeners() {
   // Process button
   processBtn.addEventListener('click', handleProcessFiles);
 
-  // Manual token testing
-  const testTokenBtn = document.getElementById('testTokenBtn');
-  if (testTokenBtn) {
-    testTokenBtn.addEventListener('click', handleTestToken);
-  }
+
 
   // File memory system
   document.querySelectorAll('.reuse-btn').forEach(btn => {
@@ -261,12 +257,15 @@ function updateProcessButtonState() {
   const hasOutputFile = outputWorkbook !== null;
   const hasSelectedFiles = getSelectedPowerBIFiles().length > 0;
   const waitingForToken = tokenStatus === 'searching';
+  const noTokenFound = tokenStatus === 'none' && !hasToken;
 
-  processBtn.disabled = !hasOutputFile || !hasSelectedFiles || isProcessing || waitingForToken;
+  processBtn.disabled = !hasOutputFile || !hasSelectedFiles || isProcessing || waitingForToken || noTokenFound;
 
   if (waitingForToken) {
     processBtn.textContent = 'Waiting for PowerBI Token...';
-  } else if (hasOutputFile && hasSelectedFiles) {
+  } else if (noTokenFound) {
+    processBtn.textContent = 'No PowerBI Token Found - Cannot Process';
+  } else if (hasOutputFile && hasSelectedFiles && hasToken) {
     processBtn.textContent = 'Download & Process Files';
   } else if (!hasOutputFile) {
     processBtn.textContent = 'Select Output File First';
@@ -372,15 +371,11 @@ async function handleProcessFiles() {
       throw new Error(`Configuration not found for file: ${fileKey}`);
     });
 
-    // Check for manual token
-    const manualToken = document.getElementById('manualToken')?.value?.trim();
-
     // Inject content script and start download
     const response = await chrome.tabs.sendMessage(tab.id, {
       action: 'downloadPowerBIFiles',
       selectedFiles: selectedFiles,
-      fileConfigs: fileConfigs,
-      manualToken: manualToken || null
+      fileConfigs: fileConfigs
     });
 
     if (!response.success) {
@@ -461,22 +456,6 @@ function handleTokenDetected(tokenInfo) {
 
   // Update token status
   onTokenFound();
-
-  // Show notification
-  showStatus(`🔐 PowerBI token detected from ${getApiName(tokenInfo.apiUrl)}`, 'success');
-
-  // Hide manual token section
-  const manualTokenSection = document.querySelector('details.advanced-settings');
-  if (manualTokenSection) {
-    manualTokenSection.style.display = 'none';
-    console.log('Manual token section hidden - automatic token detected');
-  }
-
-  // Update manual token status if in manual section
-  const manualTokenStatus = document.getElementById('tokenStatus');
-  if (manualTokenStatus && manualTokenStatus.id !== 'tokenStatus') {
-    manualTokenStatus.innerHTML = '<span style="color: green;">✅ Token auto-detected - manual input not needed</span>';
-  }
 }
 
 // Get friendly API name from URL
@@ -499,17 +478,32 @@ function updateTokenStatus(status) {
       tokenStatusDiv.textContent = 'Finding token...';
       tokenStatusDiv.className = 'token-status searching';
       tokenStatusDiv.style.display = 'block';
-      hasToken = false;
+      tokenStatusDiv.style.cursor = 'default';
+      tokenStatusDiv.onclick = null;
+      tokenStatusDiv.title = '';
+      // Don't change hasToken when searching - might already have one
       break;
     case 'found':
-      tokenStatusDiv.textContent = 'Found token!';
-      tokenStatusDiv.className = 'token-status found';
-      tokenStatusDiv.style.display = 'block';
-      hasToken = true;
+      // Token found - hide the status completely  
+      tokenStatusDiv.style.display = 'none';
+      tokenStatusDiv.onclick = null;
+      tokenStatusDiv.title = '';
+      // Don't change hasToken here - it's set in onTokenFound
       break;
     case 'none':
-      tokenStatusDiv.style.display = 'none';
-      hasToken = false;
+      if (!hasToken) {
+        tokenStatusDiv.textContent = 'No token found';
+        tokenStatusDiv.className = 'token-status';
+        tokenStatusDiv.style.display = 'block';
+        tokenStatusDiv.style.color = '#d32f2f';
+        tokenStatusDiv.style.backgroundColor = '#ffebee';
+        tokenStatusDiv.style.cursor = 'pointer';
+        tokenStatusDiv.title = 'Click to retry token search';
+        tokenStatusDiv.onclick = retryTokenSearch;
+      } else {
+        tokenStatusDiv.style.display = 'none';
+      }
+      // Only set hasToken = false if we really don't have a token
       break;
   }
 
@@ -517,19 +511,66 @@ function updateTokenStatus(status) {
   updateProcessButtonState();
 }
 
-function startTokenSearch() {
+async function startTokenSearch() {
   updateTokenStatus('searching');
+
+  try {
+    // Get current tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (!tab.url.includes('app.powerbi.com')) {
+      console.log('Not on PowerBI page, skipping token search');
+      hasToken = false; // Explicitly set to false since we can't search
+      updateTokenStatus('none');
+      showStatus('❌ Please navigate to app.powerbi.com to find PowerBI token', 'error');
+      return;
+    }
+
+    // Inject content script if needed
+    try {
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['download.js']
+      });
+    } catch (error) {
+      console.log('Content script already injected or error injecting:', error.message);
+    }
+
+    // Request token search from content script
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      action: 'searchForToken'
+    });
+
+    if (response && response.tokenFound) {
+      console.log('Token found immediately in session storage');
+      // Token detection notification will come via separate message
+    } else {
+      console.log('Token not found in session storage');
+      // Set timeout to stop searching if no token found
+      setTimeout(() => {
+        if (tokenStatus === 'searching') {
+          console.log('No token found after search');
+          hasToken = false; // Explicitly set to false since we didn't find one
+          updateTokenStatus('none');
+          showStatus('❌ No PowerBI token found. Please make sure you are logged into PowerBI and try refreshing the page.', 'error');
+        }
+      }, 3000);
+    }
+
+  } catch (error) {
+    console.error('Error starting token search:', error);
+    updateTokenStatus('none');
+  }
 }
 
 function onTokenFound() {
-  updateTokenStatus('found');
+  hasToken = true; // Set the flag first
+  updateTokenStatus('none'); // Hide token status immediately when found
+}
 
-  // Hide the status after 3 seconds
-  setTimeout(() => {
-    if (tokenStatus === 'found') {
-      updateTokenStatus('none');
-    }
-  }, 3000);
+function retryTokenSearch() {
+  console.log('Retrying token search...');
+  startTokenSearch();
 }
 
 function showProgress(message) {
@@ -629,30 +670,7 @@ function handleClearFile(event) {
   }
 }
 
-function handleTestToken() {
-  const tokenInput = document.getElementById('manualToken');
-  const tokenStatus = document.getElementById('tokenStatus');
-  const token = tokenInput.value.trim();
 
-  if (!token) {
-    tokenStatus.innerHTML = '<span style="color: red;">❌ Please enter a token</span>';
-    return;
-  }
-
-  if (token.length < 50) {
-    tokenStatus.innerHTML = '<span style="color: red;">❌ Token too short (should be 200+ characters)</span>';
-    return;
-  }
-
-  // Basic token format validation
-  if (!token.match(/^[A-Za-z0-9\-_\.]+$/)) {
-    tokenStatus.innerHTML = '<span style="color: red;">❌ Invalid token format</span>';
-    return;
-  }
-
-  tokenStatus.innerHTML = '<span style="color: green;">✅ Token format looks valid</span>';
-  console.log('Manual token set:', token.substring(0, 20) + '...');
-}
 
 // Add event listeners for dynamic elements
 document.addEventListener('change', function (event) {
