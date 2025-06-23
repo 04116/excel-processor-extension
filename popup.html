@@ -72,49 +72,7 @@
         color: #721c24;
         border: 1px solid #f5c6cb;
       }
-      .remembered-file {
-        display: flex;
-        align-items: center;
-        background-color: #e8f5e8;
-        border: 1px solid #4caf50;
-        border-radius: 4px;
-        padding: 8px;
-        margin-bottom: 8px;
-        gap: 8px;
-      }
-      .remembered-file .file-name {
-        flex: 1;
-        font-size: 12px;
-        color: #2e7d2e;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .reuse-btn {
-        background-color: #4caf50;
-        color: white;
-        border: none;
-        border-radius: 3px;
-        padding: 4px 8px;
-        font-size: 11px;
-        cursor: pointer;
-      }
-      .reuse-btn:hover {
-        background-color: #45a049;
-      }
-      .clear-btn {
-        background-color: #f44336;
-        color: white;
-        border: none;
-        border-radius: 3px;
-        padding: 2px 6px;
-        font-size: 12px;
-        cursor: pointer;
-        min-width: 20px;
-      }
-      .clear-btn:hover {
-        background-color: #da190b;
-      }
+
       .sheet-checkboxes {
         max-height: 120px;
         overflow-y: auto;
@@ -327,38 +285,10 @@
         transition: width 0.3s ease;
         width: 0%;
       }
-      .token-status {
-        font-size: 9px;
-        padding: 2px 6px;
-        border-radius: 8px;
-        font-weight: bold;
-        text-transform: uppercase;
-        margin-bottom: 8px;
-        text-align: center;
-      }
-      .token-status.searching {
-        color: #d32f2f;
-        background-color: #ffebee;
-        animation: blink 1s infinite;
-      }
-      .token-status.found {
-        color: #388e3c;
-        background-color: #e8f5e8;
-      }
-      @keyframes blink {
-        0%,
-        50% {
-          opacity: 1;
-        }
-        51%,
-        100% {
-          opacity: 0.3;
-        }
-      }
     </style>
   </head>
   <body>
-    <h2>PowerBI Excel Processor</h2>
+    <h3>Export from PowerBI then add to Excel file</h3>
     <div class="file-section" id="dataSourceSection">
       <label>Time Periods to Download:</label>
 
@@ -372,14 +302,7 @@
     </div>
 
     <div class="file-section">
-      <label for="outFile">1. Select Output File (Excel):</label>
-      <div id="rememberedOutFile" class="remembered-file" style="display: none">
-        <span class="file-name"></span>
-        <button type="button" class="reuse-btn" data-type="out">
-          Use Again
-        </button>
-        <button type="button" class="clear-btn" data-type="out">×</button>
-      </div>
+      <label for="outFile">Output File (Excel):</label>
       <input type="file" id="outFile" accept=".xlsx,.xls,.xlsb" />
 
       <!-- Inline Progress Indicator -->
@@ -391,24 +314,16 @@
       </div>
     </div>
 
-    <!-- Step 3: Sheet Validation -->
+    <!-- Step 3: Sheet Mapping -->
     <div class="file-section" id="destSheetSection" style="display: none">
-      <label id="destSheetLabel">2. Sheet Mapping Validation:</label>
-      <div style="font-size: 12px; color: #666; margin-bottom: 8px">
-        Verify that target sheets exist in your destination file:
+      <label id="destSheetLabel">Validate needed sheets on selected output file:</label>
+      <div class="period-checkboxes" id="destSheets">
+        <!-- Sheet mappings will be dynamically generated -->
       </div>
-      <div id="destSheets" class="sheet-checkboxes"></div>
     </div>
 
     <!-- Step 4: Process Button -->
     <div class="file-section">
-      <div
-        id="tokenStatus"
-        class="token-status searching"
-        style="display: none"
-      >
-        Finding token...
-      </div>
       <button id="processBtn" disabled>Select Output File First</button>
       <div style="font-size: 11px; color: #666; margin-top: 8px">
         This will download all three PowerBI files and replace data in the

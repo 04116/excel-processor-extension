@@ -4,7 +4,6 @@
 let outputWorkbook = null;
 let outputFileName = '';
 let isProcessing = false;
-let tokenStatus = 'searching'; // 'searching', 'found', 'none'
 let hasToken = false;
 
 // DOM elements
@@ -14,7 +13,7 @@ const statusDiv = document.getElementById('status');
 const inlineProgress = document.getElementById('inlineProgress');
 const progressText = document.getElementById('progressText');
 const progressFill = document.getElementById('progressFill');
-const tokenStatusDiv = document.getElementById('tokenStatus');
+
 
 // PowerBI workflow elements
 const powerbiControls = document.getElementById('powerbiControls');
@@ -26,7 +25,6 @@ const destSheets = document.getElementById('destSheets');
 document.addEventListener('DOMContentLoaded', function () {
   initializeExtension();
   setupEventListeners();
-  loadRememberedFiles();
 });
 
 function initializeExtension() {
@@ -36,8 +34,8 @@ function initializeExtension() {
   // Generate period checkboxes for the 3 PowerBI files
   generatePowerBIFileCheckboxes();
 
-  // Start token search
-  startTokenSearch();
+  // Check token availability on startup to warn user if needed
+  checkInitialTokenStatus();
 
   console.log('Extension initialized for PowerBI 3-file workflow');
 }
@@ -48,17 +46,6 @@ function setupEventListeners() {
 
   // Process button
   processBtn.addEventListener('click', handleProcessFiles);
-
-
-
-  // File memory system
-  document.querySelectorAll('.reuse-btn').forEach(btn => {
-    btn.addEventListener('click', handleReuseFile);
-  });
-
-  document.querySelectorAll('.clear-btn').forEach(btn => {
-    btn.addEventListener('click', handleClearFile);
-  });
 }
 
 function generatePowerBIFileCheckboxes() {
@@ -155,9 +142,6 @@ async function handleOutputFileSelection(event) {
     // Enable process button if we have valid configuration
     updateProcessButtonState();
 
-    // Remember this file
-    rememberFile('out', file.name, buffer);
-
     hideProgress();
     showStatus('Output file loaded successfully', 'success');
 
@@ -192,81 +176,35 @@ function displaySheetMappingValidation(availableSheets) {
 
   const files = window.PowerBIConfig.files;
   Object.entries(files).forEach(([fileKey, config]) => {
-    // Get current target sheet from dropdown (if exists) or default from config
-    const sheetSelect = document.getElementById(`sheet_${fileKey}`);
-    const targetSheet = sheetSelect ? sheetSelect.value : config.targetSheet;
+    const targetSheet = config.targetSheet;
     const exists = availableSheets.includes(targetSheet);
 
-    const validationDiv = document.createElement('div');
-    validationDiv.className = 'sheet-checkbox';
+    const mappingDiv = document.createElement('div');
+    mappingDiv.className = 'period-checkbox'; // Use same class as periods for consistent styling
 
     const statusIcon = exists ? '✅' : '❌';
-    const statusClass = exists ? 'success' : 'error';
-    const statusText = exists ? 'Found' : 'Missing';
+    const statusColor = exists ? '#2e7d32' : '#d32f2f';
 
-    validationDiv.innerHTML = `
-      <div style="display: flex; align-items: center; width: 100%;">
-        <span style="margin-right: 8px; font-size: 14px;">${statusIcon}</span>
-        <div style="flex: 1;">
-          <strong>${config.displayName}</strong>
-          <div class="sheet-info">Target sheet: "${targetSheet}" - <span style="color: ${exists ? 'green' : 'red'}">${statusText}</span></div>
-        </div>
+    mappingDiv.innerHTML = `
+      <div style="font-size: 11px; line-height: 1.2;">
+        <span style="color: ${statusColor};">"${targetSheet}" ${statusIcon}</span>
       </div>
     `;
 
-    if (!exists) {
-      validationDiv.style.backgroundColor = '#ffebee';
-      validationDiv.style.borderLeft = '3px solid #f44336';
-    } else {
-      validationDiv.style.backgroundColor = '#e8f5e8';
-      validationDiv.style.borderLeft = '3px solid #4CAF50';
-    }
-
-    destSheets.appendChild(validationDiv);
+    destSheets.appendChild(mappingDiv);
   });
-
-  // Show available sheets if there are missing mappings
-  const missingSheets = Object.entries(files).filter(([fileKey, config]) => {
-    const sheetSelect = document.getElementById(`sheet_${fileKey}`);
-    const targetSheet = sheetSelect ? sheetSelect.value : config.targetSheet;
-    return !availableSheets.includes(targetSheet);
-  });
-
-  if (missingSheets.length > 0) {
-    const availableSheetsDiv = document.createElement('div');
-    availableSheetsDiv.className = 'sheet-checkbox';
-    availableSheetsDiv.style.backgroundColor = '#f0f8ff';
-    availableSheetsDiv.style.borderLeft = '3px solid #2196F3';
-    availableSheetsDiv.style.marginTop = '10px';
-
-    availableSheetsDiv.innerHTML = `
-      <div>
-        <strong>📋 Available sheets in your file:</strong>
-        <div class="sheet-info">${availableSheets.join(', ')}</div>
-        <div class="sheet-info" style="margin-top: 5px; font-style: italic;">
-          💡 Tip: Use the dropdowns above to map PowerBI files to existing sheets
-        </div>
-      </div>
-    `;
-
-    destSheets.appendChild(availableSheetsDiv);
-  }
 }
 
 function updateProcessButtonState() {
   const hasOutputFile = outputWorkbook !== null;
   const hasSelectedFiles = getSelectedPowerBIFiles().length > 0;
-  const waitingForToken = tokenStatus === 'searching';
-  const noTokenFound = tokenStatus === 'none' && !hasToken;
 
-  processBtn.disabled = !hasOutputFile || !hasSelectedFiles || isProcessing || waitingForToken || noTokenFound;
+  processBtn.disabled = !hasOutputFile || !hasSelectedFiles || isProcessing;
 
-  if (waitingForToken) {
-    processBtn.textContent = 'Waiting for PowerBI Token...';
-  } else if (noTokenFound) {
-    processBtn.textContent = 'No PowerBI Token Found - Cannot Process';
-  } else if (hasOutputFile && hasSelectedFiles && hasToken) {
-    processBtn.textContent = 'Download & Process Files';
+  if (isProcessing) {
+    processBtn.textContent = 'Processing...';
+  } else if (hasOutputFile && hasSelectedFiles) {
+    processBtn.textContent = 'Download & Fillup data';
   } else if (!hasOutputFile) {
     processBtn.textContent = 'Select Output File First';
   } else {
@@ -324,11 +262,6 @@ async function handleProcessFiles() {
 
   try {
     isProcessing = true;
-
-    // Start token search if not already found
-    if (!hasToken) {
-      startTokenSearch();
-    }
 
     updateProcessButtonState();
 
@@ -468,109 +401,58 @@ function getApiName(apiUrl) {
 }
 
 // Token status management
-function updateTokenStatus(status) {
-  tokenStatus = status;
+// Token status is no longer needed - tokens are checked during processing
 
-  if (!tokenStatusDiv) return;
-
-  switch (status) {
-    case 'searching':
-      tokenStatusDiv.textContent = 'Finding token...';
-      tokenStatusDiv.className = 'token-status searching';
-      tokenStatusDiv.style.display = 'block';
-      tokenStatusDiv.style.cursor = 'default';
-      tokenStatusDiv.onclick = null;
-      tokenStatusDiv.title = '';
-      // Don't change hasToken when searching - might already have one
-      break;
-    case 'found':
-      // Token found - hide the status completely  
-      tokenStatusDiv.style.display = 'none';
-      tokenStatusDiv.onclick = null;
-      tokenStatusDiv.title = '';
-      // Don't change hasToken here - it's set in onTokenFound
-      break;
-    case 'none':
-      if (!hasToken) {
-        tokenStatusDiv.textContent = 'No token found';
-        tokenStatusDiv.className = 'token-status';
-        tokenStatusDiv.style.display = 'block';
-        tokenStatusDiv.style.color = '#d32f2f';
-        tokenStatusDiv.style.backgroundColor = '#ffebee';
-        tokenStatusDiv.style.cursor = 'pointer';
-        tokenStatusDiv.title = 'Click to retry token search';
-        tokenStatusDiv.onclick = retryTokenSearch;
-      } else {
-        tokenStatusDiv.style.display = 'none';
-      }
-      // Only set hasToken = false if we really don't have a token
-      break;
-  }
-
-  // Update process button state
-  updateProcessButtonState();
-}
-
-async function startTokenSearch() {
-  updateTokenStatus('searching');
-
+async function checkTokenAvailability() {
   try {
     // Get current tab
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
     if (!tab.url.includes('app.powerbi.com')) {
-      console.log('Not on PowerBI page, skipping token search');
-      hasToken = false; // Explicitly set to false since we can't search
-      updateTokenStatus('none');
-      showStatus('❌ Please navigate to app.powerbi.com to find PowerBI token', 'error');
-      return;
+      return false;
     }
 
-    // Inject content script if needed
-    try {
-      await chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        files: ['download.js']
-      });
-    } catch (error) {
-      console.log('Content script already injected or error injecting:', error.message);
-    }
-
-    // Request token search from content script
+    // Content script is already injected by manifest.json, just send message
     const response = await chrome.tabs.sendMessage(tab.id, {
       action: 'searchForToken'
     });
 
-    if (response && response.tokenFound) {
-      console.log('Token found immediately in session storage');
-      // Token detection notification will come via separate message
+    return response && response.tokenFound;
+
+  } catch (error) {
+    console.error('Error checking token availability:', error);
+    return false;
+  }
+}
+
+async function checkInitialTokenStatus() {
+  try {
+    // Get current tab
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+
+    if (!tab.url.includes('app.powerbi.com')) {
+      showStatus('⚠️ Please navigate to app.powerbi.com to use this extension', 'error');
+      return;
+    }
+
+    // Check if token is available
+    const tokenAvailable = await checkTokenAvailability();
+
+    if (tokenAvailable) {
+      hasToken = true;
+      console.log('✅ PowerBI token found - extension ready');
     } else {
-      console.log('Token not found in session storage');
-      // Set timeout to stop searching if no token found
-      setTimeout(() => {
-        if (tokenStatus === 'searching') {
-          console.log('No token found after search');
-          hasToken = false; // Explicitly set to false since we didn't find one
-          updateTokenStatus('none');
-          showStatus('❌ No PowerBI token found. Please make sure you are logged into PowerBI and try refreshing the page.', 'error');
-        }
-      }, 3000);
+      showStatus('⚠️ PowerBI token not found. Please make sure you are logged into PowerBI and refresh the page if needed.', 'error');
     }
 
   } catch (error) {
-    console.error('Error starting token search:', error);
-    updateTokenStatus('none');
+    console.error('Error checking initial token status:', error);
+    showStatus('⚠️ Could not verify PowerBI access. Please make sure you are logged into PowerBI.', 'error');
   }
 }
 
 function onTokenFound() {
   hasToken = true; // Set the flag first
-  updateTokenStatus('none'); // Hide token status immediately when found
-}
-
-function retryTokenSearch() {
-  console.log('Retrying token search...');
-  startTokenSearch();
 }
 
 function showProgress(message) {
@@ -594,83 +476,6 @@ function showStatus(message, type) {
     }, 5000);
   }
 }
-
-// File memory system
-function rememberFile(type, filename, buffer) {
-  const key = `remembered_${type}_file`;
-  chrome.storage.local.set({
-    [key]: {
-      filename: filename,
-      buffer: Array.from(buffer),
-      timestamp: Date.now()
-    }
-  });
-
-  updateRememberedFileDisplay(type, filename);
-}
-
-function updateRememberedFileDisplay(type, filename) {
-  const rememberedDiv = document.getElementById(`remembered${type.charAt(0).toUpperCase() + type.slice(1)}File`);
-  if (rememberedDiv) {
-    rememberedDiv.style.display = 'flex';
-    rememberedDiv.querySelector('.file-name').textContent = filename;
-  }
-}
-
-function loadRememberedFiles() {
-  chrome.storage.local.get(['remembered_out_file'], (result) => {
-    if (result.remembered_out_file) {
-      updateRememberedFileDisplay('out', result.remembered_out_file.filename);
-    }
-  });
-}
-
-function handleReuseFile(event) {
-  const type = event.target.getAttribute('data-type');
-  const key = `remembered_${type}_file`;
-
-  chrome.storage.local.get([key], (result) => {
-    if (result[key]) {
-      const buffer = new Uint8Array(result[key].buffer);
-
-      if (type === 'out') {
-        try {
-          outputWorkbook = window.ExcelProcessor.readExcelFile(buffer, result[key].filename);
-          outputFileName = result[key].filename;
-
-          updateSheetSelectors(outputWorkbook.SheetNames);
-          destSheetSection.style.display = 'block';
-          updateProcessButtonState();
-
-          showStatus('Reused remembered output file', 'success');
-        } catch (error) {
-          showStatus(`Error loading remembered file: ${error.message}`, 'error');
-        }
-      }
-    }
-  });
-}
-
-function handleClearFile(event) {
-  const type = event.target.getAttribute('data-type');
-  const key = `remembered_${type}_file`;
-
-  chrome.storage.local.remove([key]);
-
-  const rememberedDiv = document.getElementById(`remembered${type.charAt(0).toUpperCase() + type.slice(1)}File`);
-  if (rememberedDiv) {
-    rememberedDiv.style.display = 'none';
-  }
-
-  if (type === 'out') {
-    outputWorkbook = null;
-    outputFileName = '';
-    destSheetSection.style.display = 'none';
-    updateProcessButtonState();
-  }
-}
-
-
 
 // Add event listeners for dynamic elements
 document.addEventListener('change', function (event) {

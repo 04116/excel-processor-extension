@@ -198,15 +198,48 @@ function requestBodyForDownloadByTimePeriod(dateConfig) {
   };
 }
 
-async function downloadExcelFile(dateConfig, skipTokenExtraction = false) {
+// Get PowerBI token from session storage
+function getTokenFromSessionStorage() {
+  try {
+    // Scan session storage keys for PowerBI auth data
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i);
+      const value = sessionStorage.getItem(key);
+
+      // Look for keys/values that contain homeAccountId (indicates PowerBI auth data)
+      if (key && value && (key.includes('homeAccountId') || value.includes('homeAccountId'))) {
+        try {
+          // Try to parse as JSON to extract token
+          const parsed = JSON.parse(value);
+
+          // Look for access token in various possible locations
+          const token = parsed.secret || parsed.accessToken || parsed.access_token ||
+            parsed.token || parsed.credentialType === 'AccessToken' && parsed.secret;
+
+          if (token && typeof token === 'string' && token.length > 50) {
+            return token;
+          }
+
+        } catch (e) {
+          // Not JSON or other parse error, continue silently
+          continue;
+        }
+      }
+    }
+
+    return null;
+
+  } catch (error) {
+    console.error('Error accessing session storage:', error);
+    return null;
+  }
+}
+
+async function downloadExcelFile(dateConfig) {
   const requestBody = requestBodyForDownloadByTimePeriod(dateConfig);
 
-  let bearerToken = extractBearerToken();
-
-  // Skip token extraction if explicitly requested (for failed downloads)
-  if (!bearerToken && !skipTokenExtraction) {
-    bearerToken = await waitForTokenFromNetworkRequests();
-  }
+  // Get the PowerBI token from session storage
+  const bearerToken = getTokenFromSessionStorage();
 
   if (!bearerToken) {
     const currentUrl = window.location.href;
@@ -246,43 +279,6 @@ Try:
     body: JSON.stringify(requestBody),
     credentials: "include"
   });
-}
-
-// Download multiple PowerBI files concurrently with progress tracking
-async function downloadMultiplePowerBIFiles(fileConfigs, onProgress) {
-  // Use the same concurrent logic as the main function
-  return await downloadMultiplePowerBIFilesWithConfigs(fileConfigs, onProgress);
-}
-
-// Convert downloaded files to workbook objects for processing
-async function convertDownloadedFilesToWorkbooks(downloadResults) {
-  const workbooks = {};
-
-  // Load XLSX library if not available
-  if (typeof XLSX === 'undefined') {
-    await loadXLSXLibrary();
-  }
-
-  for (const [fileKey, result] of Object.entries(downloadResults)) {
-    if (result.success && result.data) {
-      try {
-        // Use XLSX library directly to read the file
-        const workbook = XLSX.read(result.data, {
-          type: 'array',
-          cellDates: true,
-          cellNF: false,
-          cellStyles: false
-        });
-
-        workbooks[fileKey] = workbook;
-        console.log(`Converted ${fileKey} to workbook with sheets:`, workbook.SheetNames);
-      } catch (error) {
-        console.error(`Failed to convert ${fileKey} to workbook:`, error);
-      }
-    }
-  }
-
-  return workbooks;
 }
 
 // Load XLSX library into content script context
@@ -384,185 +380,75 @@ function reconstructConfigFunctions(config) {
   return reconstructed;
 }
 
-// Complete workflow: Download 3 files and process them
-async function downloadAndProcessPowerBIFiles(selectedFiles, onProgress) {
-  try {
-    // Load configuration if not available
-    let powerBIConfig = window.PowerBIConfig;
-    if (!powerBIConfig) {
-      // Try to load from the extension's config
-      powerBIConfig = await loadPowerBIConfig();
-    }
+// Convert downloaded files to workbook objects for processing
+async function convertDownloadedFilesToWorkbooks(downloadResults) {
+  const workbooks = {};
 
-    if (!powerBIConfig) {
-      throw new Error('PowerBI configuration not available');
-    }
-
-    // Get file configurations
-    const fileConfigs = selectedFiles.map(fileKey => {
-      if (powerBIConfig.files && powerBIConfig.files[fileKey]) {
-        return powerBIConfig.files[fileKey];
-      }
-      throw new Error(`Configuration not found for file: ${fileKey}`);
-    });
-
-    // Download all files
-    const downloadResults = await downloadMultiplePowerBIFiles(fileConfigs, onProgress);
-
-    // Convert to workbooks
-    const workbooks = await convertDownloadedFilesToWorkbooks(downloadResults);
-
-    // Return results
-    return {
-      downloadResults,
-      workbooks,
-      success: Object.keys(workbooks).length > 0
-    };
-
-  } catch (error) {
-    console.error('Error in download and process workflow:', error);
-    throw error;
+  // Load XLSX library if not available
+  if (typeof XLSX === 'undefined') {
+    await loadXLSXLibrary();
   }
-}
 
-// Load PowerBI configuration from extension
-async function loadPowerBIConfig() {
-  try {
-    // Inject the configuration into the page
-    const configScript = document.createElement('script');
-    configScript.src = chrome.runtime.getURL('config.js');
-    document.head.appendChild(configScript);
-
-    // Wait for it to load
-    await new Promise(resolve => {
-      configScript.onload = resolve;
-    });
-
-    return window.PowerBIConfig;
-  } catch (error) {
-    console.error('Failed to load PowerBI config:', error);
-
-    // Fallback: define the configuration inline
-    return {
-      files: {
-        'Day_Le': {
-          name: 'Day_Le',
-          displayName: 'Day Le (Yesterday)',
-          description: 'Yesterday vs Same Day Last Year',
-          fileName: 'Day_Le_Report.xlsx',
-          targetSheet: 'Day_Le',
-          getCurrentStartDate: () => {
-            const date = new Date();
-            date.setDate(date.getDate() - 1);
-            return date.toISOString().split('.')[0];
-          },
-          getCurrentEndDate: () => {
-            return new Date().toISOString().split('.')[0];
-          },
-          getReferenceStartDate: () => {
-            const date = new Date();
-            date.setFullYear(date.getFullYear() - 1);
-            date.setDate(date.getDate() - 1);
-            return date.toISOString().split('.')[0];
-          },
-          getReferenceEndDate: () => {
-            const date = new Date();
-            date.setFullYear(date.getFullYear() - 1);
-            return date.toISOString().split('.')[0];
-          }
-        },
-        'MTD_Le': {
-          name: 'MTD_Le',
-          displayName: 'MTD Le (Month to Date)',
-          description: 'Month to Date vs Same Period Last Year',
-          fileName: 'MTD_Le_Report.xlsx',
-          targetSheet: 'MTD_Le',
-          getCurrentStartDate: () => {
-            const date = new Date();
-            date.setDate(1);
-            return date.toISOString().split('.')[0];
-          },
-          getCurrentEndDate: () => {
-            return new Date().toISOString().split('.')[0];
-          },
-          getReferenceStartDate: () => {
-            const date = new Date();
-            date.setFullYear(date.getFullYear() - 1);
-            date.setDate(1);
-            return date.toISOString().split('.')[0];
-          },
-          getReferenceEndDate: () => {
-            const date = new Date();
-            date.setFullYear(date.getFullYear() - 1);
-            return date.toISOString().split('.')[0];
-          }
-        },
-        '09.06-now': {
-          name: '09.06-now',
-          displayName: '09.06-now (June 9 to Now)',
-          description: 'June 9 to Today vs Same Period Last Year',
-          fileName: '09.06-now_Report.xlsx',
-          targetSheet: '09.06-now',
-          getCurrentStartDate: () => {
-            const date = new Date();
-            date.setMonth(5, 9);
-            return date.toISOString().split('.')[0];
-          },
-          getCurrentEndDate: () => {
-            return new Date().toISOString().split('.')[0];
-          },
-          getReferenceStartDate: () => {
-            const date = new Date();
-            date.setFullYear(date.getFullYear() - 1);
-            date.setMonth(5, 9);
-            return date.toISOString().split('.')[0];
-          },
-          getReferenceEndDate: () => {
-            const date = new Date();
-            date.setFullYear(date.getFullYear() - 1);
-            return date.toISOString().split('.')[0];
-          }
-        }
-      }
-    };
-  }
-}
-
-// Message handler for extension popup communication
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message.action === 'downloadPowerBIFiles') {
-    const { selectedFiles, fileConfigs } = message;
-
-    // Use the provided file configurations directly
-    downloadMultiplePowerBIFilesWithConfigs(fileConfigs, (progress) => {
-      // Send progress updates back to popup
-      chrome.runtime.sendMessage({
-        action: 'downloadProgress',
-        progress: progress
-      });
-    })
-      .then(downloadResults => {
-        // Convert to workbooks
-        return convertDownloadedFilesToWorkbooks(downloadResults).then(workbooks => {
-          return { downloadResults, workbooks };
+  for (const [fileKey, result] of Object.entries(downloadResults)) {
+    if (result.success && result.data) {
+      try {
+        // Use XLSX library directly to read the file
+        const workbook = XLSX.read(result.data, {
+          type: 'array',
+          cellDates: true,
+          cellNF: false,
+          cellStyles: false
         });
-      })
-      .then(({ downloadResults, workbooks }) => {
-        const results = {
-          downloadResults: downloadResults,
-          workbooks: workbooks,
-          success: Object.keys(workbooks).length > 0
-        };
-        sendResponse({ success: true, data: results });
-      })
-      .catch(error => {
-        sendResponse({ success: false, error: error.message });
-      });
 
-    // Return true to indicate async response
-    return true;
+        workbooks[fileKey] = workbook;
+        console.log(`Converted ${fileKey} to workbook with sheets:`, workbook.SheetNames);
+      } catch (error) {
+        console.error(`Failed to convert ${fileKey} to workbook:`, error);
+      }
+    }
   }
-});
+
+  return workbooks;
+}
+
+// Create placeholder Excel data when download fails
+function createPlaceholderExcelData(config) {
+  try {
+    // Load XLSX library if available
+    if (typeof XLSX === 'undefined') {
+      console.warn('XLSX library not available for placeholder creation');
+      return new Uint8Array(0); // Empty array as fallback
+    }
+
+    // Create a simple Excel workbook with placeholder data
+    const wb = XLSX.utils.book_new();
+
+    // Create placeholder data
+    const placeholderData = [
+      ['Data Source', 'Status', 'Date', 'Message'],
+      [config.displayName, 'Download Failed', new Date().toISOString().split('T')[0], 'Could not download from PowerBI'],
+      ['Note', '', '', 'This is placeholder data. Original download failed.'],
+      ['File', config.fileName, '', ''],
+      ['Target Sheet', config.targetSheet, '', '']
+    ];
+
+    // Create worksheet
+    const ws = XLSX.utils.aoa_to_sheet(placeholderData);
+
+    // Add worksheet to workbook
+    XLSX.utils.book_append_sheet(wb, ws, 'PlaceholderData');
+
+    // Convert to array buffer
+    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+
+    console.log(`Created placeholder Excel data for ${config.displayName}`);
+    return new Uint8Array(wbout);
+
+  } catch (error) {
+    console.error('Error creating placeholder Excel data:', error);
+    return new Uint8Array(0); // Return empty array as fallback
+  }
+}
 
 // Download multiple PowerBI files concurrently (simultaneously)
 async function downloadMultiplePowerBIFilesWithConfigs(fileConfigs, onProgress) {
@@ -593,7 +479,7 @@ async function downloadMultiplePowerBIFilesWithConfigs(fileConfigs, onProgress) 
       console.log(`Starting download ${index + 1}/${totalFiles}: ${config.displayName}`);
 
       // Download the file
-      const response = await downloadExcelFile(config, false);
+      const response = await downloadExcelFile(config);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -685,135 +571,49 @@ async function downloadMultiplePowerBIFilesWithConfigs(fileConfigs, onProgress) 
   return results;
 }
 
-// Scan session storage for PowerBI token
-function scanSessionStorageForToken() {
-  console.log('🔍 Scanning session storage for PowerBI token...');
-
-  try {
-    // Scan all session storage keys
-    for (let i = 0; i < sessionStorage.length; i++) {
-      const key = sessionStorage.key(i);
-      const value = sessionStorage.getItem(key);
-
-      // Look for keys/values that contain homeAccountId (indicates PowerBI auth data)
-      if (key && value && (key.includes('homeAccountId') || value.includes('homeAccountId'))) {
-        console.log('🎯 Found session storage item with homeAccountId:', key);
-
-        try {
-          // Try to parse as JSON to extract token
-          const parsed = JSON.parse(value);
-
-          // Look for access token in various possible locations
-          const token = parsed.secret || parsed.accessToken || parsed.access_token ||
-            parsed.token || parsed.credentialType === 'AccessToken' && parsed.secret;
-
-          if (token && typeof token === 'string' && token.length > 50) {
-            console.log('✅ Found PowerBI token in session storage!');
-            window._capturedPowerBIToken = token;
-
-            // Notify extension popup about token detection
-            notifyTokenDetected(token, 'sessionStorage');
-            return token;
-          }
-
-        } catch (e) {
-          // Not JSON or other parse error, continue
-          console.log('🔍 Session storage item not JSON:', key);
-        }
-      }
-    }
-
-    console.log('❌ No PowerBI token found in session storage');
-    return null;
-
-  } catch (error) {
-    console.error('Error scanning session storage:', error);
-    return null;
-  }
-}
-
-// Set up token detection
-(function setupTokenCapture() {
-  console.log('Setting up PowerBI token detection...');
-
-  // First, try to find token in session storage immediately
-  scanSessionStorageForToken();
-
-  console.log('PowerBI token detection ready');
-})();
-
-// Notify extension popup when token is detected
-function notifyTokenDetected(token, apiUrl) {
-  try {
-    const message = {
-      action: 'tokenDetected',
-      token: token.substring(0, 20) + '...', // Only send first 20 chars for security
-      apiUrl: apiUrl,
-      timestamp: new Date().toISOString()
-    };
-
-    // Send message to extension popup
-    chrome.runtime.sendMessage(message).catch(e => {
-      // Popup might not be open, that's okay
-      console.log('Token detected but popup not available to notify');
-    });
-
-    console.log('🔔 Token detection notification sent to extension');
-  } catch (error) {
-    console.log('Error sending token notification:', error);
-  }
-}
-
-// Create placeholder Excel data when download fails
-function createPlaceholderExcelData(config) {
-  try {
-    // Load XLSX library if available
-    if (typeof XLSX === 'undefined') {
-      console.warn('XLSX library not available for placeholder creation');
-      return new Uint8Array(0); // Empty array as fallback
-    }
-
-    // Create a simple Excel workbook with placeholder data
-    const wb = XLSX.utils.book_new();
-
-    // Create placeholder data
-    const placeholderData = [
-      ['Data Source', 'Status', 'Date', 'Message'],
-      [config.displayName, 'Download Failed', new Date().toISOString().split('T')[0], 'Could not download from PowerBI'],
-      ['Note', '', '', 'This is placeholder data. Original download failed.'],
-      ['File', config.fileName, '', ''],
-      ['Target Sheet', config.targetSheet, '', '']
-    ];
-
-    // Create worksheet
-    const ws = XLSX.utils.aoa_to_sheet(placeholderData);
-
-    // Add worksheet to workbook
-    XLSX.utils.book_append_sheet(wb, ws, 'PlaceholderData');
-
-    // Convert to array buffer
-    const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-
-    console.log(`Created placeholder Excel data for ${config.displayName}`);
-    return new Uint8Array(wbout);
-
-  } catch (error) {
-    console.error('Error creating placeholder Excel data:', error);
-    return new Uint8Array(0); // Return empty array as fallback
-  }
-}
-
-// Export functions
-window.downloadPowerBiReport = downloadExcelFile;
-window.downloadMultiplePowerBIFiles = downloadMultiplePowerBIFiles;
-window.convertDownloadedFilesToWorkbooks = convertDownloadedFilesToWorkbooks;
-window.downloadAndProcessPowerBIFiles = downloadAndProcessPowerBIFiles;
-
-// Listen for token search requests from popup
+// Message handler for extension popup communication
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'downloadPowerBIFiles') {
+    const { fileConfigs } = message;
+
+    // Use the provided file configurations directly
+    downloadMultiplePowerBIFilesWithConfigs(fileConfigs, (progress) => {
+      // Send progress updates back to popup
+      chrome.runtime.sendMessage({
+        action: 'downloadProgress',
+        progress: progress
+      });
+    })
+      .then(downloadResults => {
+        // Convert to workbooks
+        return convertDownloadedFilesToWorkbooks(downloadResults).then(workbooks => {
+          return { downloadResults, workbooks };
+        });
+      })
+      .then(({ downloadResults, workbooks }) => {
+        const results = {
+          downloadResults: downloadResults,
+          workbooks: workbooks,
+          success: Object.keys(workbooks).length > 0
+        };
+        sendResponse({ success: true, data: results });
+      })
+      .catch(error => {
+        sendResponse({ success: false, error: error.message });
+      });
+
+    // Return true to indicate async response
+    return true;
+  }
+
   if (message.action === 'searchForToken') {
-    console.log('🔍 Token search requested - scanning session storage');
-    const token = scanSessionStorageForToken();
+    const token = getTokenFromSessionStorage();
     sendResponse({ success: true, tokenFound: !!token });
   }
 });
+
+// Extension ready - token will be retrieved from session storage when needed
+
+// Export functions for external use
+window.downloadPowerBiReport = downloadExcelFile;
+window.convertDownloadedFilesToWorkbooks = convertDownloadedFilesToWorkbooks;
