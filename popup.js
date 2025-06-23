@@ -4,6 +4,8 @@
 let outputWorkbook = null;
 let outputFileName = '';
 let isProcessing = false;
+let tokenStatus = 'searching'; // 'searching', 'found', 'none'
+let hasToken = false;
 
 // DOM elements
 const outFileInput = document.getElementById('outFile');
@@ -12,6 +14,7 @@ const statusDiv = document.getElementById('status');
 const inlineProgress = document.getElementById('inlineProgress');
 const progressText = document.getElementById('progressText');
 const progressFill = document.getElementById('progressFill');
+const tokenStatusDiv = document.getElementById('tokenStatus');
 
 // PowerBI workflow elements
 const powerbiControls = document.getElementById('powerbiControls');
@@ -32,6 +35,9 @@ function initializeExtension() {
 
   // Generate period checkboxes for the 3 PowerBI files
   generatePowerBIFileCheckboxes();
+
+  // Start token search
+  startTokenSearch();
 
   console.log('Extension initialized for PowerBI 3-file workflow');
 }
@@ -254,10 +260,13 @@ function displaySheetMappingValidation(availableSheets) {
 function updateProcessButtonState() {
   const hasOutputFile = outputWorkbook !== null;
   const hasSelectedFiles = getSelectedPowerBIFiles().length > 0;
+  const waitingForToken = tokenStatus === 'searching';
 
-  processBtn.disabled = !hasOutputFile || !hasSelectedFiles || isProcessing;
+  processBtn.disabled = !hasOutputFile || !hasSelectedFiles || isProcessing || waitingForToken;
 
-  if (hasOutputFile && hasSelectedFiles) {
+  if (waitingForToken) {
+    processBtn.textContent = 'Waiting for PowerBI Token...';
+  } else if (hasOutputFile && hasSelectedFiles) {
     processBtn.textContent = 'Download & Process Files';
   } else if (!hasOutputFile) {
     processBtn.textContent = 'Select Output File First';
@@ -316,6 +325,12 @@ async function handleProcessFiles() {
 
   try {
     isProcessing = true;
+
+    // Start token search if not already found
+    if (!hasToken) {
+      startTokenSearch();
+    }
+
     updateProcessButtonState();
 
     const selectedFiles = getSelectedPowerBIFiles();
@@ -444,6 +459,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 function handleTokenDetected(tokenInfo) {
   console.log('🔔 PowerBI token detected:', tokenInfo);
 
+  // Update token status
+  onTokenFound();
+
   // Show notification
   showStatus(`🔐 PowerBI token detected from ${getApiName(tokenInfo.apiUrl)}`, 'success');
 
@@ -454,10 +472,10 @@ function handleTokenDetected(tokenInfo) {
     console.log('Manual token section hidden - automatic token detected');
   }
 
-  // Update token status if in manual section
-  const tokenStatus = document.getElementById('tokenStatus');
-  if (tokenStatus) {
-    tokenStatus.innerHTML = '<span style="color: green;">✅ Token auto-detected - manual input not needed</span>';
+  // Update manual token status if in manual section
+  const manualTokenStatus = document.getElementById('tokenStatus');
+  if (manualTokenStatus && manualTokenStatus.id !== 'tokenStatus') {
+    manualTokenStatus.innerHTML = '<span style="color: green;">✅ Token auto-detected - manual input not needed</span>';
   }
 }
 
@@ -468,6 +486,50 @@ function getApiName(apiUrl) {
   if (apiUrl.includes('userdetails')) return 'User Details API';
   if (apiUrl.includes('analysis.windows.net')) return 'PowerBI API';
   return 'PowerBI Service';
+}
+
+// Token status management
+function updateTokenStatus(status) {
+  tokenStatus = status;
+
+  if (!tokenStatusDiv) return;
+
+  switch (status) {
+    case 'searching':
+      tokenStatusDiv.textContent = 'Finding token...';
+      tokenStatusDiv.className = 'token-status searching';
+      tokenStatusDiv.style.display = 'block';
+      hasToken = false;
+      break;
+    case 'found':
+      tokenStatusDiv.textContent = 'Found token!';
+      tokenStatusDiv.className = 'token-status found';
+      tokenStatusDiv.style.display = 'block';
+      hasToken = true;
+      break;
+    case 'none':
+      tokenStatusDiv.style.display = 'none';
+      hasToken = false;
+      break;
+  }
+
+  // Update process button state
+  updateProcessButtonState();
+}
+
+function startTokenSearch() {
+  updateTokenStatus('searching');
+}
+
+function onTokenFound() {
+  updateTokenStatus('found');
+
+  // Hide the status after 3 seconds
+  setTimeout(() => {
+    if (tokenStatus === 'found') {
+      updateTokenStatus('none');
+    }
+  }, 3000);
 }
 
 function showProgress(message) {

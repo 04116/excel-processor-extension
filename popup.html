@@ -7,6 +7,7 @@
         width: 320px;
         padding: 12px;
         font-family: Arial, sans-serif;
+        position: relative;
       }
       .file-section {
         margin-bottom: 12px;
@@ -350,6 +351,34 @@
         transition: width 0.3s ease;
         width: 0%;
       }
+      .token-status {
+        font-size: 9px;
+        padding: 2px 6px;
+        border-radius: 8px;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-bottom: 8px;
+        text-align: center;
+      }
+      .token-status.searching {
+        color: #d32f2f;
+        background-color: #ffebee;
+        animation: blink 1s infinite;
+      }
+      .token-status.found {
+        color: #388e3c;
+        background-color: #e8f5e8;
+      }
+      @keyframes blink {
+        0%,
+        50% {
+          opacity: 1;
+        }
+        51%,
+        100% {
+          opacity: 0.3;
+        }
+      }
     </style>
   </head>
   <body>
@@ -397,6 +426,13 @@
 
     <!-- Step 4: Process Button -->
     <div class="file-section">
+      <div
+        id="tokenStatus"
+        class="token-status searching"
+        style="display: none"
+      >
+        Finding token...
+      </div>
       <button id="processBtn" disabled>Select Output File First</button>
       <div style="font-size: 11px; color: #666; margin-top: 8px">
         This will download all three PowerBI files and replace data in the
