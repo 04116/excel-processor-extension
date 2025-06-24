@@ -579,6 +579,251 @@ async function processDownloadedPowerBIFiles(outputWorkbook, downloadResults, sh
   }
 }
 
+// Create a new Excel workbook from downloaded PowerBI files
+async function createNewExcelFromPowerBIFiles(downloadResults) {
+  try {
+    const XLSX = getXLSX();
+
+    // Create a new workbook
+    const newWorkbook = XLSX.utils.book_new();
+    const results = [];
+    const createdSheets = [];
+
+    // Convert download results to workbooks if needed
+    let downloadedWorkbooks = {};
+
+    if (downloadResults.workbooks) {
+      // Results from downloadAndProcessPowerBIFiles (old format)
+      downloadedWorkbooks = downloadResults.workbooks;
+    } else if (downloadResults.downloadResults) {
+      // New format - need to convert raw data to workbooks
+      console.log('Converting downloaded files to workbooks...');
+
+      for (const [fileKey, result] of Object.entries(downloadResults.downloadResults)) {
+        if (result.success && result.data) {
+          try {
+            console.log(`Converting ${fileKey} to workbook...`);
+
+            // Convert object back to Uint8Array if needed
+            let dataArray = result.data;
+            if (result.data.constructor.name === 'Object' && typeof result.data['0'] === 'number') {
+              // Data was serialized as object, convert back to Uint8Array
+              const dataLength = Object.keys(result.data).length;
+              dataArray = new Uint8Array(dataLength);
+              for (let i = 0; i < dataLength; i++) {
+                dataArray[i] = result.data[i];
+              }
+              console.log(`  Converted object to Uint8Array, length: ${dataArray.length}`);
+            }
+
+            const workbook = XLSX.read(dataArray, {
+              type: 'array',
+              cellDates: true,
+              cellNF: false,
+              cellStyles: false
+            });
+
+            downloadedWorkbooks[fileKey] = workbook;
+            console.log(`✅ Converted ${fileKey} to workbook with sheets:`, workbook.SheetNames);
+
+          } catch (error) {
+            console.error(`❌ Failed to convert ${fileKey} to workbook:`, error);
+
+            // Create placeholder data for failed conversions
+            const placeholderData = [
+              ['Error', 'Failed to process downloaded data'],
+              ['File Key', fileKey],
+              ['Error Message', error.message],
+              ['Download Time', new Date().toISOString()],
+              ['', ''],
+              ['Note', 'This is placeholder data due to processing error']
+            ];
+
+            const placeholderWorkbook = XLSX.utils.book_new();
+            const placeholderSheet = XLSX.utils.aoa_to_sheet(placeholderData);
+            XLSX.utils.book_append_sheet(placeholderWorkbook, placeholderSheet, 'Error_Data');
+
+            downloadedWorkbooks[fileKey] = placeholderWorkbook;
+
+            results.push({
+              fileKey,
+              sheetName: fileKey,
+              success: false,
+              error: error.message,
+              isPlaceholder: true
+            });
+          }
+        } else {
+          console.warn(`No data for ${fileKey}, creating placeholder`);
+
+          // Create placeholder for missing data
+          const placeholderData = [
+            ['Status', 'Download Failed'],
+            ['File Key', fileKey],
+            ['Error', result.error || 'No data available'],
+            ['Download Time', new Date().toISOString()],
+            ['', ''],
+            ['Note', 'This is placeholder data due to download failure']
+          ];
+
+          const placeholderWorkbook = XLSX.utils.book_new();
+          const placeholderSheet = XLSX.utils.aoa_to_sheet(placeholderData);
+          XLSX.utils.book_append_sheet(placeholderWorkbook, placeholderSheet, 'Missing_Data');
+
+          downloadedWorkbooks[fileKey] = placeholderWorkbook;
+
+          results.push({
+            fileKey,
+            sheetName: fileKey,
+            success: false,
+            error: result.error || 'Download failed',
+            isPlaceholder: true
+          });
+        }
+      }
+    }
+
+    // Add each downloaded PowerBI file as a separate sheet
+    for (const [fileKey, workbook] of Object.entries(downloadedWorkbooks)) {
+      try {
+        if (workbook && workbook.SheetNames && workbook.SheetNames.length > 0) {
+          const sourceSheetName = workbook.SheetNames[0]; // Use first sheet from downloaded file
+          const sourceSheet = workbook.Sheets[sourceSheetName];
+
+          // Create a clean sheet name (remove invalid characters)
+          let targetSheetName = fileKey.replace(/[\/\\\?\*\[\]]/g, '_');
+
+          // Ensure sheet name is not too long (Excel limit is 31 characters)
+          if (targetSheetName.length > 31) {
+            targetSheetName = targetSheetName.substring(0, 31);
+          }
+
+          // Ensure unique sheet name
+          let finalSheetName = targetSheetName;
+          let counter = 1;
+          while (newWorkbook.Sheets[finalSheetName]) {
+            const suffix = `_${counter}`;
+            const maxLength = 31 - suffix.length;
+            finalSheetName = targetSheetName.substring(0, maxLength) + suffix;
+            counter++;
+          }
+
+          console.log(`Adding sheet: ${fileKey} → ${finalSheetName}`);
+
+          // Clone the sheet to avoid reference issues
+          let clonedSheet = JSON.parse(JSON.stringify(sourceSheet));
+
+          // Unmerge cells in the cloned sheet
+          console.log(`  Unmerging cells in sheet ${finalSheetName}`);
+          clonedSheet = unmergeSheet(clonedSheet);
+
+          // Add the sheet to the new workbook
+          XLSX.utils.book_append_sheet(newWorkbook, clonedSheet, finalSheetName);
+
+          createdSheets.push(finalSheetName);
+
+          // Check if this was a placeholder (error case)
+          const isPlaceholder = results.some(r => r.fileKey === fileKey && r.isPlaceholder);
+
+          if (!isPlaceholder) {
+            results.push({
+              fileKey,
+              sheetName: finalSheetName,
+              success: true,
+              message: `Successfully added sheet ${finalSheetName} from ${fileKey}`,
+              isPlaceholder: false
+            });
+          } else {
+            // Update the existing placeholder result with sheet name
+            const placeholderResult = results.find(r => r.fileKey === fileKey && r.isPlaceholder);
+            if (placeholderResult) {
+              placeholderResult.sheetName = finalSheetName;
+            }
+          }
+
+          console.log(`✅ Successfully added sheet ${finalSheetName} from ${fileKey}`);
+
+        } else {
+          throw new Error(`No sheets found in downloaded file ${fileKey}`);
+        }
+
+      } catch (error) {
+        console.error(`Failed to add sheet for ${fileKey}:`, error);
+
+        // Create error sheet for this file
+        const errorData = [
+          ['Error Processing File', fileKey],
+          ['Error Message', error.message],
+          ['Timestamp', new Date().toISOString()],
+          ['', ''],
+          ['Note', 'This sheet represents a failed file processing']
+        ];
+
+        const errorSheet = XLSX.utils.aoa_to_sheet(errorData);
+        let errorSheetName = `Error_${fileKey}`.substring(0, 31);
+
+        // Ensure unique error sheet name
+        let counter = 1;
+        while (newWorkbook.Sheets[errorSheetName]) {
+          const suffix = `_${counter}`;
+          const maxLength = 31 - suffix.length;
+          errorSheetName = `Error_${fileKey}`.substring(0, maxLength) + suffix;
+          counter++;
+        }
+
+        XLSX.utils.book_append_sheet(newWorkbook, errorSheet, errorSheetName);
+        createdSheets.push(errorSheetName);
+
+        results.push({
+          fileKey,
+          sheetName: errorSheetName,
+          success: false,
+          error: error.message,
+          isPlaceholder: true
+        });
+      }
+    }
+
+    // Add a summary sheet
+    const summaryData = [
+      ['PowerBI Data Export Summary'],
+      ['Generated on', new Date().toISOString()],
+      ['Total Files', Object.keys(downloadedWorkbooks).length],
+      ['Successful Downloads', results.filter(r => r.success && !r.isPlaceholder).length],
+      ['Failed Downloads', results.filter(r => !r.success || r.isPlaceholder).length],
+      [''],
+      ['Sheet Details:'],
+      ['Sheet Name', 'Source File', 'Status'],
+      ...results.map(r => [
+        r.sheetName,
+        r.fileKey,
+        r.success && !r.isPlaceholder ? 'Success' : (r.isPlaceholder ? 'Placeholder' : 'Error')
+      ])
+    ];
+
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(newWorkbook, summarySheet, 'Summary');
+    createdSheets.unshift('Summary'); // Add to beginning
+
+    console.log(`Created new Excel workbook with ${createdSheets.length} sheets:`, createdSheets);
+
+    return {
+      success: true,
+      workbook: newWorkbook,
+      results: results,
+      createdSheets: createdSheets
+    };
+
+  } catch (error) {
+    console.error('Error creating new Excel file from PowerBI data:', error);
+    return {
+      success: false,
+      error: error.message,
+      results: []
+    };
+  }
+}
+
 // Export functions for use in other modules
 window.ExcelProcessor = {
   numberToColumn,
@@ -595,5 +840,6 @@ window.ExcelProcessor = {
   replaceMatchingColumns,
   processPowerBIFilesWithSheetMapping,
   validateSheetMappingInWorkbook,
-  processDownloadedPowerBIFiles
+  processDownloadedPowerBIFiles,
+  createNewExcelFromPowerBIFiles
 };

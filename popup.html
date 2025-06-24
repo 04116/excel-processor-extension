@@ -288,7 +288,7 @@
     </style>
   </head>
   <body>
-    <h3>Export from PowerBI then add to Excel file</h3>
+    <h3>Download PowerBI Data to Excel File</h3>
     <div class="file-section" id="dataSourceSection">
       <label>Time Periods to Download:</label>
 
@@ -301,35 +301,20 @@
       </div>
     </div>
 
-    <div class="file-section">
-      <label for="outFile">Output File (Excel):</label>
-      <input type="file" id="outFile" accept=".xlsx,.xls,.xlsb" />
-
-      <!-- Inline Progress Indicator -->
-      <div id="inlineProgress" class="inline-progress">
-        <div id="progressText">Loading file...</div>
-        <div class="progress-bar">
-          <div id="progressFill" class="progress-fill"></div>
-        </div>
+    <!-- Inline Progress Indicator -->
+    <div id="inlineProgress" class="inline-progress">
+      <div id="progressText">Loading...</div>
+      <div class="progress-bar">
+        <div id="progressFill" class="progress-fill"></div>
       </div>
     </div>
 
-    <!-- Step 3: Sheet Mapping -->
-    <div class="file-section" id="destSheetSection" style="display: none">
-      <label id="destSheetLabel"
-        >Validate needed sheets on selected output file:</label
-      >
-      <div class="period-checkboxes" id="destSheets">
-        <!-- Sheet mappings will be dynamically generated -->
-      </div>
-    </div>
-
-    <!-- Step 4: Process Button -->
+    <!-- Process Button -->
     <div class="file-section">
-      <button id="processBtn" disabled>Select Output File First</button>
+      <button id="processBtn" disabled>Loading Time Periods...</button>
       <div style="font-size: 11px; color: #666; margin-top: 8px">
-        This will download all three PowerBI files and replace data in the
-        corresponding sheets of your destination Excel file.
+        This will download all PowerBI files and create a new Excel file with
+        separate sheets for each time period.
       </div>
     </div>
 
