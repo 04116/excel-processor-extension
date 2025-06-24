@@ -71,9 +71,6 @@ function detectColumnRange(workbook) {
     const sheetName = sheetNames[0];
     let worksheet = workbook.Sheets[sheetName];
 
-    // Unmerge cells first to get accurate data range
-    worksheet = unmergeSheet(worksheet);
-
     if (!worksheet['!ref']) return null;
 
     // Convert to array data for analysis
@@ -108,40 +105,6 @@ function detectColumnRange(workbook) {
     console.error('Error detecting column range:', error);
     return null;
   }
-}
-
-// Unmerge all merged cells in a worksheet
-function unmergeSheet(worksheet) {
-  const XLSX = getXLSX();
-
-  if (!worksheet['!merges']) return worksheet;
-
-  const merges = worksheet['!merges'];
-  const newWorksheet = { ...worksheet };
-
-  // For each merged range, copy the top-left value to all cells in the range
-  merges.forEach(merge => {
-    const startRow = merge.s.r;
-    const endRow = merge.e.r;
-    const startCol = merge.s.c;
-    const endCol = merge.e.c;
-
-    const topLeftCell = XLSX.utils.encode_cell({ r: startRow, c: startCol });
-    const topLeftValue = worksheet[topLeftCell];
-
-    for (let row = startRow; row <= endRow; row++) {
-      for (let col = startCol; col <= endCol; col++) {
-        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
-        if (topLeftValue) {
-          newWorksheet[cellAddress] = { ...topLeftValue };
-        }
-      }
-    }
-  });
-
-  // Remove merge information since we've unmerged everything
-  delete newWorksheet['!merges'];
-  return newWorksheet;
 }
 
 // Clear specified column range in a worksheet (only the detected columns)
@@ -181,9 +144,6 @@ function copyDataToSheetSpecific(sourceWorkbook, targetWorkbook, sourceSheetName
 
     let sourceSheet = sourceWorkbook.Sheets[sourceSheetName];
     console.log(`  Source sheet range: ${sourceSheet['!ref']}`);
-
-    // Unmerge source sheet
-    sourceSheet = unmergeSheet(sourceSheet);
 
     if (!targetWorkbook.Sheets[targetSheetName]) {
       throw new Error(`Target sheet "${targetSheetName}" not found in output file. Available sheets: ${targetWorkbook.SheetNames.join(', ')}`);
@@ -713,10 +673,6 @@ async function createNewExcelFromPowerBIFiles(downloadResults) {
           // Clone the sheet to avoid reference issues
           let clonedSheet = JSON.parse(JSON.stringify(sourceSheet));
 
-          // Unmerge cells in the cloned sheet
-          console.log(`  Unmerging cells in sheet ${finalSheetName}`);
-          clonedSheet = unmergeSheet(clonedSheet);
-
           // Add the sheet to the new workbook
           XLSX.utils.book_append_sheet(newWorkbook, clonedSheet, finalSheetName);
 
@@ -830,7 +786,6 @@ window.ExcelProcessor = {
   columnToNumber,
   readExcelFile,
   detectColumnRange,
-  unmergeSheet,
   clearColumnRange,
   copyDataToSheetSpecific,
   downloadExcelFile,
