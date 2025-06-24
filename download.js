@@ -18,7 +18,7 @@ const POWERBI_CONFIG = {
       },
       getCurrentEndDate: () => {
         const today = new Date();
-        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate());
       },
       getReferenceStartDate: () => {
         const today = new Date();
@@ -26,7 +26,7 @@ const POWERBI_CONFIG = {
       },
       getReferenceEndDate: () => {
         const today = new Date();
-        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() + 1);
       }
     },
     'MTD_Le': {
@@ -41,7 +41,7 @@ const POWERBI_CONFIG = {
       },
       getCurrentEndDate: () => {
         const today = new Date();
-        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate());
       },
       getReferenceStartDate: () => {
         const today = new Date();
@@ -49,7 +49,7 @@ const POWERBI_CONFIG = {
       },
       getReferenceEndDate: () => {
         const today = new Date();
-        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() - 1);
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
       }
     },
     '09.06-now': {
@@ -64,7 +64,7 @@ const POWERBI_CONFIG = {
       },
       getCurrentEndDate: () => {
         const today = new Date();
-        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate());
       },
       getReferenceStartDate: () => {
         const today = new Date();
@@ -72,7 +72,7 @@ const POWERBI_CONFIG = {
       },
       getReferenceEndDate: () => {
         const today = new Date();
-        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() + 1);
       }
     }
   },
