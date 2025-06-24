@@ -15,8 +15,12 @@
   ],
   "content_scripts": [
     {
-      "matches": ["https://app.powerbi.com/*"],
-      "js": ["download.js"],
+      "matches": [
+        "https://app.powerbi.com/*"
+      ],
+      "js": [
+        "download.js"
+      ],
       "run_at": "document_end"
     }
   ],
@@ -26,8 +30,15 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["libs/xlsx.full.min.js", "config.js", "excel-processor.js", "powerbi-debug.js"],
-      "matches": ["<all_urls>"]
+      "resources": [
+        "libs/xlsx.full.min.js",
+        "config.js",
+        "excel-processor.js",
+        "powerbi-debug.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
     }
   ],
   "content_security_policy": {

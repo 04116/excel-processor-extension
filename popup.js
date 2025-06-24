@@ -5,6 +5,7 @@ let outputWorkbook = null;
 let outputFileName = '';
 let isProcessing = false;
 let hasToken = false;
+let timePeriodsData = null; // Store time periods data received from download.js
 
 // DOM elements
 const outFileInput = document.getElementById('outFile');
@@ -31,8 +32,8 @@ function initializeExtension() {
   // Show PowerBI controls by default
   powerbiControls.style.display = 'block';
 
-  // Generate period checkboxes for the 3 PowerBI files
-  generatePowerBIFileCheckboxes();
+  // Request time periods data from download.js
+  requestTimePeriodsData();
 
   // Check token availability on startup to warn user if needed
   checkInitialTokenStatus();
@@ -48,25 +49,49 @@ function setupEventListeners() {
   processBtn.addEventListener('click', handleProcessFiles);
 }
 
+// Request time periods data from download.js via message
+async function requestTimePeriodsData() {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+
+    if (!tab) {
+      console.error('No active tab found');
+      return;
+    }
+
+    const response = await chrome.tabs.sendMessage(tab.id, {
+      action: 'getTimePeriodsData'
+    });
+
+    if (response && response.success && response.timePeriodsData) {
+      timePeriodsData = response.timePeriodsData;
+      generatePowerBIFileCheckboxes();
+    } else {
+      console.error('Failed to get time periods data:', response?.error || 'No response');
+      showStatus('Failed to load time periods data', 'error');
+    }
+  } catch (error) {
+    console.error('Error requesting time periods data:', error);
+    showStatus('Failed to load time periods data', 'error');
+  }
+}
+
 function generatePowerBIFileCheckboxes() {
-  if (!window.PowerBIConfig) {
-    console.error('PowerBIConfig not loaded');
+  if (!timePeriodsData) {
+    console.error('Time periods data not loaded');
     return;
   }
 
-  const files = window.PowerBIConfig.files;
   periodCheckboxes.innerHTML = '';
 
-  Object.entries(files).forEach(([fileKey, config]) => {
+  Object.entries(timePeriodsData).forEach(([fileKey, dateInfo]) => {
     const checkboxDiv = document.createElement('div');
     checkboxDiv.className = 'period-checkbox';
 
-    // Get actual date ranges for this configuration
-    const dateInfo = getDateRangeInfo(config);
-
     checkboxDiv.innerHTML = `
       <div style="font-size: 11px; line-height: 1.2;">
-        <strong style="color: #333;">${config.targetSheet}:</strong>
+        <strong style="color: #333;">${dateInfo.targetSheet}:</strong>
         <span style="color: #f57c00;">${dateInfo.referencePeriod}</span> vs.
         <span style="color: #2e7d32;">${dateInfo.currentPeriod}</span>
       </div>
@@ -74,46 +99,6 @@ function generatePowerBIFileCheckboxes() {
 
     periodCheckboxes.appendChild(checkboxDiv);
   });
-}
-
-// Get formatted date range information for display
-function getDateRangeInfo(config) {
-  try {
-    const currentStart = config.getCurrentStartDate();
-    const currentEnd = config.getCurrentEndDate();
-    const referenceStart = config.getReferenceStartDate();
-    const referenceEnd = config.getReferenceEndDate();
-
-    const formatDate = (date) => {
-      const options = {
-        timeZone: 'Asia/Ho_Chi_Minh',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      };
-
-      return date.toLocaleDateString('en-GB', options);
-    };
-
-    const formatDateRange = (startDate, endDate) => {
-      const start = formatDate(startDate);
-      const end = formatDate(endDate);
-
-      return `${start} - ${end}`;
-    };
-
-    return {
-      currentPeriod: formatDateRange(currentStart, currentEnd),
-      referencePeriod: formatDateRange(referenceStart, referenceEnd)
-    };
-
-  } catch (error) {
-    console.error('Error getting date range info:', error);
-    return {
-      currentPeriod: 'Date calculation error',
-      referencePeriod: 'Date calculation error'
-    };
-  }
 }
 
 async function handleOutputFileSelection(event) {
@@ -169,14 +154,13 @@ function updateSheetSelectors(availableSheets) {
 }
 
 function displaySheetMappingValidation(availableSheets) {
-  if (!window.PowerBIConfig) return;
+  if (!timePeriodsData) return;
 
   const destSheets = document.getElementById('destSheets');
   destSheets.innerHTML = '';
 
-  const files = window.PowerBIConfig.files;
-  Object.entries(files).forEach(([fileKey, config]) => {
-    const targetSheet = config.targetSheet;
+  Object.entries(timePeriodsData).forEach(([fileKey, dateInfo]) => {
+    const targetSheet = dateInfo.targetSheet;
     const exists = availableSheets.includes(targetSheet);
 
     const mappingDiv = document.createElement('div');
@@ -214,24 +198,24 @@ function updateProcessButtonState() {
 
 function getSelectedPowerBIFiles() {
   // Since checkboxes are removed, return all available PowerBI files
-  if (!window.PowerBIConfig || !window.PowerBIConfig.files) {
+  if (!timePeriodsData) {
     return [];
   }
-  return Object.keys(window.PowerBIConfig.files);
+  return Object.keys(timePeriodsData);
 }
 
 function getCurrentSheetMapping() {
   const mapping = {};
 
   // Since checkboxes are removed, map all available PowerBI files
-  if (window.PowerBIConfig && window.PowerBIConfig.files) {
-    Object.keys(window.PowerBIConfig.files).forEach(fileKey => {
+  if (timePeriodsData) {
+    Object.keys(timePeriodsData).forEach(fileKey => {
       const sheetSelect = document.getElementById(`sheet_${fileKey}`);
       if (sheetSelect) {
         mapping[fileKey] = sheetSelect.value;
       } else {
         // Use default target sheet from config
-        mapping[fileKey] = window.PowerBIConfig.files[fileKey].targetSheet;
+        mapping[fileKey] = timePeriodsData[fileKey].targetSheet;
       }
     });
   }
@@ -240,18 +224,18 @@ function getCurrentSheetMapping() {
 }
 
 function updateSheetMappingFromSelectors() {
-  if (!window.PowerBIConfig) return;
+  if (!timePeriodsData) return;
 
   // Update the PowerBI configuration based on user selections
   document.querySelectorAll('.sheet-select').forEach(select => {
     const fileKey = select.id.replace('sheet_', '');
     const selectedSheet = select.value;
 
-    if (window.PowerBIConfig.files[fileKey]) {
-      window.PowerBIConfig.files[fileKey].targetSheet = selectedSheet;
+    if (timePeriodsData[fileKey]) {
+      timePeriodsData[fileKey].targetSheet = selectedSheet;
       // Also update the global sheet mapping
-      if (window.PowerBIConfig.sheetMapping) {
-        window.PowerBIConfig.sheetMapping[fileKey] = selectedSheet;
+      if (timePeriodsData.sheetMapping) {
+        timePeriodsData.sheetMapping[fileKey] = selectedSheet;
       }
     }
   });
@@ -296,19 +280,9 @@ async function handleProcessFiles() {
       console.warn('Could not inject debug helper:', error);
     }
 
-    // Get file configurations to pass to content script
-    const fileConfigs = selectedFiles.map(fileKey => {
-      if (window.PowerBIConfig && window.PowerBIConfig.files[fileKey]) {
-        return window.PowerBIConfig.files[fileKey];
-      }
-      throw new Error(`Configuration not found for file: ${fileKey}`);
-    });
-
-    // Inject content script and start download
+    // Just send a trigger message - config will be loaded from file
     const response = await chrome.tabs.sendMessage(tab.id, {
-      action: 'downloadPowerBIFiles',
-      selectedFiles: selectedFiles,
-      fileConfigs: fileConfigs
+      action: 'downloadPowerBIFiles'
     });
 
     if (!response.success) {

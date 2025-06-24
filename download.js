@@ -1,3 +1,90 @@
+//#################################################################################
+//# POWERBI CONFIGURATION SECTION
+//#################################################################################
+
+// PowerBI Configuration for 3 File Downloads and Sheet Mapping
+const POWERBI_CONFIG = {
+  // Configuration for 3 PowerBI files to download
+  files: {
+    'Day_Le': {
+      name: 'Day_Le',
+      displayName: 'Day Le (Yesterday)',
+      description: 'Yesterday vs Same Day Last Year',
+      fileName: 'Day_Le_Report.xlsx',
+      targetSheet: 'Day_Le',
+      getCurrentStartDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+      },
+      getCurrentEndDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+      },
+      getReferenceStartDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+      },
+      getReferenceEndDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+      }
+    },
+    'MTD_Le': {
+      name: 'MTD_Le',
+      displayName: 'MTD Le (Month to Date)',
+      description: 'Month to Date vs Same Period Last Year',
+      fileName: 'MTD_Le_Report.xlsx',
+      targetSheet: 'MTD_Le',
+      getCurrentStartDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear(), today.getMonth(), 1);
+      },
+      getCurrentEndDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+      },
+      getReferenceStartDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear() - 1, today.getMonth(), 1);
+      },
+      getReferenceEndDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate() - 1);
+      }
+    },
+    '09.06-now': {
+      name: '09.06-now',
+      displayName: '09.06-now (June 9 to Now)',
+      description: 'June 9 to Today vs Same Period Last Year',
+      fileName: '09.06-now_Report.xlsx',
+      targetSheet: '09.06-now',
+      getCurrentStartDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear(), 5, 9);
+      },
+      getCurrentEndDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+      },
+      getReferenceStartDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear() - 1, 5, 10);
+      },
+      getReferenceEndDate: () => {
+        const today = new Date();
+        return new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
+      }
+    }
+  },
+
+  // PowerBI API endpoint
+  apiEndpoint: 'https://wabi-south-east-asia-b-primary-redirect.analysis.windows.net/export/xlsx'
+};
+
+//#################################################################################
+//# POWERBI API REQUEST BODY GENERATION
+//#################################################################################
+
 function requestBodyForDownloadByTimePeriod(dateConfig) {
   const currentStartDate = dateConfig.getCurrentStartDate();
   const currentEndDate = dateConfig.getCurrentEndDate();
@@ -198,6 +285,10 @@ function requestBodyForDownloadByTimePeriod(dateConfig) {
   };
 }
 
+//#################################################################################
+//# POWERBI AUTHENTICATION
+//#################################################################################
+
 // Get PowerBI token from session storage
 function getTokenFromSessionStorage() {
   try {
@@ -281,6 +372,10 @@ Try:
   });
 }
 
+//#################################################################################
+//# EXCEL LIBRARY MANAGEMENT
+//#################################################################################
+
 // Load XLSX library into content script context
 async function loadXLSXLibrary() {
   return new Promise((resolve, reject) => {
@@ -344,84 +439,7 @@ async function loadXLSXLibrary() {
   });
 }
 
-// Reconstruct config functions that get lost during serialization
-function reconstructConfigFunctions(config) {
-  const reconstructed = { ...config };
 
-  // Reconstruct date functions based on the config name
-  switch (config.name) {
-    case 'Day_Le':
-      reconstructed.getCurrentStartDate = () => {
-        const date = new Date();
-        date.setDate(date.getDate() - 1);
-        return date.toISOString().split('.')[0];
-      };
-      reconstructed.getCurrentEndDate = () => {
-        return new Date().toISOString().split('.')[0];
-      };
-      reconstructed.getReferenceStartDate = () => {
-        const date = new Date();
-        date.setFullYear(date.getFullYear() - 1);
-        date.setDate(date.getDate() - 1);
-        return date.toISOString().split('.')[0];
-      };
-      reconstructed.getReferenceEndDate = () => {
-        const date = new Date();
-        date.setFullYear(date.getFullYear() - 1);
-        return date.toISOString().split('.')[0];
-      };
-      break;
-
-    case 'MTD_Le':
-      reconstructed.getCurrentStartDate = () => {
-        const date = new Date();
-        date.setDate(1);
-        return date.toISOString().split('.')[0];
-      };
-      reconstructed.getCurrentEndDate = () => {
-        return new Date().toISOString().split('.')[0];
-      };
-      reconstructed.getReferenceStartDate = () => {
-        const date = new Date();
-        date.setFullYear(date.getFullYear() - 1);
-        date.setDate(1);
-        return date.toISOString().split('.')[0];
-      };
-      reconstructed.getReferenceEndDate = () => {
-        const date = new Date();
-        date.setFullYear(date.getFullYear() - 1);
-        return date.toISOString().split('.')[0];
-      };
-      break;
-
-    case '09.06-now':
-      reconstructed.getCurrentStartDate = () => {
-        const date = new Date();
-        date.setMonth(5, 9); // June 9th
-        return date.toISOString().split('.')[0];
-      };
-      reconstructed.getCurrentEndDate = () => {
-        return new Date().toISOString().split('.')[0];
-      };
-      reconstructed.getReferenceStartDate = () => {
-        const date = new Date();
-        date.setFullYear(date.getFullYear() - 1);
-        date.setMonth(5, 9);
-        return date.toISOString().split('.')[0];
-      };
-      reconstructed.getReferenceEndDate = () => {
-        const date = new Date();
-        date.setFullYear(date.getFullYear() - 1);
-        return date.toISOString().split('.')[0];
-      };
-      break;
-
-    default:
-      console.warn(`Unknown config type: ${config.name}`);
-  }
-
-  return reconstructed;
-}
 
 // Convert downloaded files to workbook objects for processing
 async function convertDownloadedFilesToWorkbooks(downloadResults) {
@@ -528,12 +546,8 @@ async function downloadMultiplePowerBIFilesWithConfigs(fileConfigs, onProgress) 
   console.log(`Starting concurrent download of ${totalFiles} PowerBI files...`);
 
   // Create download promises for all files simultaneously
-  const downloadPromises = fileConfigs.map(async (configOriginal, index) => {
-    let config = configOriginal;
+  const downloadPromises = fileConfigs.map(async (config, index) => {
     const fileKey = config.name;
-
-    // Reconstruct the date functions since they get lost during serialization
-    config = reconstructConfigFunctions(config);
 
     try {
       // Update progress - starting download
@@ -641,30 +655,176 @@ async function downloadMultiplePowerBIFilesWithConfigs(fileConfigs, onProgress) 
   return results;
 }
 
+//#################################################################################
+//# CONFIGURATION LOADING
+//#################################################################################
+
+// Load config directly from embedded configuration
+function loadConfigFromFile() {
+  try {
+    console.log('Using embedded PowerBI configuration');
+    return POWERBI_CONFIG;
+  } catch (error) {
+    console.error('Error accessing config:', error);
+    throw error;
+  }
+}
+
+//#################################################################################
+//# DATE CONVERSION UTILITIES
+//#################################################################################
+
+// Convert Date to GMT+7 timezone with time reset to 00:00:00
+function convertToGMT7ISOString(date) {
+  if (!(date instanceof Date)) return date;
+
+  // Get GMT+7 timezone offset (7 hours = 7 * 60 minutes)
+  const gmt7OffsetMinutes = 7 * 60;
+
+  // Create new date in GMT+7 timezone
+  const gmt7Date = new Date(date.getTime() + (gmt7OffsetMinutes * 60 * 1000));
+
+  // Get year, month, day in GMT+7 timezone
+  const year = gmt7Date.getUTCFullYear();
+  const month = String(gmt7Date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(gmt7Date.getUTCDate()).padStart(2, '0');
+
+  // Return date with time reset to 00:00:00
+  return `${year}-${month}-${day}T00:00:00`;
+}
+
+//#################################################################################
+//# TIME PERIODS DATA FORMATTING
+//#################################################################################
+
+// Get formatted time periods data for popup display
+function getFormattedTimePeriodsData() {
+  const powerBIConfig = loadConfigFromFile();
+  const timePeriodsData = {};
+
+  Object.entries(powerBIConfig.files).forEach(([fileKey, config]) => {
+    try {
+      const currentStart = config.getCurrentStartDate();
+      const currentEnd = config.getCurrentEndDate();
+      const referenceStart = config.getReferenceStartDate();
+      const referenceEnd = config.getReferenceEndDate();
+
+      const formatDate = (date) => {
+        const options = {
+          timeZone: 'Asia/Ho_Chi_Minh',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit'
+        };
+
+        return date.toLocaleDateString('en-GB', options);
+      };
+
+      const formatDateRange = (startDate, endDate) => {
+        const start = formatDate(startDate);
+        const end = formatDate(endDate);
+
+        return `${start} - ${end}`;
+      };
+
+      timePeriodsData[fileKey] = {
+        targetSheet: config.targetSheet,
+        currentPeriod: formatDateRange(currentStart, currentEnd),
+        referencePeriod: formatDateRange(referenceStart, referenceEnd)
+      };
+
+    } catch (error) {
+      console.error(`Error getting date range info for ${fileKey}:`, error);
+      timePeriodsData[fileKey] = {
+        targetSheet: config.targetSheet,
+        currentPeriod: 'Date calculation error',
+        referencePeriod: 'Date calculation error'
+      };
+    }
+  });
+
+  return timePeriodsData;
+}
+
+//#################################################################################
+//# CONFIG FORMAT CONVERSION
+//#################################################################################
+
+// Convert PowerBI config to file configs format expected by download function
+function convertPowerBIConfigToFileConfigs(powerBIConfig) {
+  const fileConfigs = [];
+
+  Object.entries(powerBIConfig.files).forEach(([key, config]) => {
+    fileConfigs.push({
+      name: config.name,
+      displayName: config.displayName,
+      description: config.description,
+      fileName: config.fileName,
+      targetSheet: config.targetSheet,
+      // Convert Date objects to GMT+7 ISO strings for API
+      getCurrentStartDate: () => {
+        const date = config.getCurrentStartDate();
+        return convertToGMT7ISOString(date);
+      },
+      getCurrentEndDate: () => {
+        const date = config.getCurrentEndDate();
+        return convertToGMT7ISOString(date);
+      },
+      getReferenceStartDate: () => {
+        const date = config.getReferenceStartDate();
+        return convertToGMT7ISOString(date);
+      },
+      getReferenceEndDate: () => {
+        const date = config.getReferenceEndDate();
+        return convertToGMT7ISOString(date);
+      }
+    });
+  });
+
+  return fileConfigs;
+}
+
+//#################################################################################
+//# CHROME EXTENSION MESSAGE HANDLING
+//#################################################################################
+
 // Message handler for extension popup communication
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === 'downloadPowerBIFiles') {
-    const { fileConfigs } = message;
+    try {
+      // Load config from embedded configuration
+      const powerBIConfig = loadConfigFromFile();
 
-    // Use the provided file configurations directly
-    downloadMultiplePowerBIFilesWithConfigs(fileConfigs, (progress) => {
-      // Send progress updates back to popup
-      chrome.runtime.sendMessage({
-        action: 'downloadProgress',
-        progress: progress
-      });
-    })
-      .then(downloadResults => {
-        // Return raw download results - workbook conversion will be handled in popup
-        const results = {
-          downloadResults: downloadResults,
-          success: Object.values(downloadResults).some(r => r.success)
-        };
-        sendResponse({ success: true, data: results });
+      // Convert config to expected format
+      const fileConfigs = convertPowerBIConfigToFileConfigs(powerBIConfig);
+
+      console.log('Loaded file configs:', fileConfigs.map(c => c.displayName));
+
+      // Start download process with loaded configs
+      downloadMultiplePowerBIFilesWithConfigs(fileConfigs, (progress) => {
+        // Send progress updates back to popup
+        chrome.runtime.sendMessage({
+          action: 'downloadProgress',
+          progress: progress
+        });
       })
-      .catch(error => {
-        sendResponse({ success: false, error: error.message });
-      });
+        .then(downloadResults => {
+          // Return raw download results - workbook conversion will be handled in popup
+          const results = {
+            downloadResults: downloadResults,
+            success: Object.values(downloadResults).some(r => r.success)
+          };
+          sendResponse({ success: true, data: results });
+        })
+        .catch(error => {
+          console.error('Download process failed:', error);
+          sendResponse({ success: false, error: error.message });
+        });
+
+    } catch (error) {
+      console.error('Config loading failed:', error);
+      sendResponse({ success: false, error: error.message });
+    }
 
     // Return true to indicate async response
     return true;
@@ -674,7 +834,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const token = getTokenFromSessionStorage();
     sendResponse({ success: true, tokenFound: !!token });
   }
+
+  if (message.action === 'getTimePeriodsData') {
+    try {
+      const timePeriodsData = getFormattedTimePeriodsData();
+      sendResponse({ success: true, timePeriodsData });
+    } catch (error) {
+      console.error('Error getting time periods data:', error);
+      sendResponse({ success: false, error: error.message });
+    }
+  }
 });
+
+//#################################################################################
+//# INITIALIZATION
+//#################################################################################
 
 // Initialize XLSX library early to prevent timing issues
 (async function initializeXLSXLibrary() {
@@ -688,6 +862,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.warn('Failed to pre-load XLSX library:', error);
   }
 })();
+
+//#################################################################################
+//# EXTERNAL API EXPORTS
+//#################################################################################
 
 // Extension ready - token will be retrieved from session storage when needed
 
