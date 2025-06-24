@@ -1,0 +1,85 @@
+name: Build and Release Extension
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get tag version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Update manifest version
+        run: |
+          # Extract version number from tag (remove 'v' prefix)
+          VERSION_NUMBER=${GITHUB_REF#refs/tags/v}
+
+          # Update version in manifest.json
+          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION_NUMBER\"/" manifest.json
+
+          echo "Updated manifest.json to version $VERSION_NUMBER"
+          cat manifest.json | grep version
+
+      - name: Build release package
+        run: |
+          chmod +x build-release.sh
+          ./build-release.sh
+
+      - name: Get package info
+        id: package_info
+        run: |
+          VERSION=$(grep '"version"' manifest.json | sed 's/.*"version": "\([^"]*\)".*/\1/')
+          PACKAGE_NAME="powerbi-data-export-extension-v${VERSION}"
+          echo "PACKAGE_NAME=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          release_name: PowerBI Data Export Extension ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ## PowerBI Data Export Extension ${{ steps.get_version.outputs.VERSION }}
+
+            Chrome extension that downloads data from PowerBI reports and creates Excel files.
+
+            ### Installation Instructions
+
+            1. Download the `${{ steps.package_info.outputs.PACKAGE_NAME }}.zip` file below
+            2. Extract it to a folder on your computer
+            3. Open Chrome and go to `chrome://extensions/`
+            4. Enable "Developer mode" (toggle in top right)
+            5. Click "Load unpacked" and select the extracted folder
+            6. The extension icon will appear in your toolbar
+
+            ### Features
+
+            - Downloads multiple PowerBI reports with different time periods
+            - Creates a new Excel workbook with each PowerBI file as a separate sheet
+            - Automatically unmerges cells for better data processing
+            - Includes a summary sheet with export details
+            - Handles download failures with placeholder sheets
+
+          draft: false
+          prerelease: false
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./release/${{ steps.package_info.outputs.PACKAGE_NAME }}.zip
+          asset_name: ${{ steps.package_info.outputs.PACKAGE_NAME }}.zip
+          asset_content_type: application/zip

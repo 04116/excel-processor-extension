@@ -35,6 +35,22 @@ Chrome extension that downloads data from PowerBI reports and creates a new Exce
 2. Run `./build-release.sh` to create a release package
 3. Follow the user installation steps above
 
+### Automated Releases
+
+This repository uses GitHub Actions to automatically build and release the extension when a new tag is created:
+
+```bash
+# Create and push a tag to trigger automatic release
+git tag v1.0.1
+git push origin v1.0.1
+```
+
+The workflow will:
+
+- Update the version in manifest.json
+- Build the release package
+- Create a GitHub release with the packaged extension
+
 ## Usage
 
 1. Navigate to app.powerbi.com and open a report
