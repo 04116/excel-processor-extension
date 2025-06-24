@@ -1,4 +1,0 @@
-change time periods. If now is 22/06/2025. 
-- Day_Le: last year: (22/06/2024-22/06/2024), this year (21/06/2025-21/06/2025)
-- MTD_Le: last year (01/06/2024-21/06/2024) this year (01/06/2025-21/06/2025)
-- 09.06-now: last year (10/06/2024-22/06/2024), this year (09/06/2025-21/06/2025)
