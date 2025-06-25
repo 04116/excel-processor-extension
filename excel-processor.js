@@ -112,6 +112,10 @@ function detectColumnRange(workbook) {
 
 // Unmerge all merged cells in a worksheet
 function unmergeSheet(worksheet) {
+  const blackListValues = {
+    "Total": true,
+  }
+
   const XLSX = getXLSX();
 
   if (!worksheet['!merges']) return worksheet;
@@ -128,6 +132,10 @@ function unmergeSheet(worksheet) {
 
     const topLeftCell = XLSX.utils.encode_cell({ r: startRow, c: startCol });
     const topLeftValue = worksheet[topLeftCell];
+
+    if (blackListValues[topLeftValue.v]) {
+      return;
+    }
 
     for (let row = startRow; row <= endRow; row++) {
       for (let col = startCol; col <= endCol; col++) {
